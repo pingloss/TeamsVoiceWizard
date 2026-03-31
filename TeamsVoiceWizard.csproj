@@ -1,0 +1,33 @@
+<Project Sdk="Uno.Sdk">
+
+  <PropertyGroup>
+    <!-- Windows-only target. Uno lets you add net9.0-ios, net9.0-android, etc. later -->
+    <TargetFramework>net9.0-windows10.0.19041</TargetFramework>
+
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>TeamsVoiceWizard</RootNamespace>
+    <AssemblyName>TeamsVoiceWizard</AssemblyName>
+
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Single-project layout -->
+    <UnoSingleProject>true</UnoSingleProject>
+
+    <DefaultLanguage>en-GB</DefaultLanguage>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.6" />
+    <PackageReference Include="System.Management.Automation" Version="7.4.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copy the core PowerShell module to the output directory -->
+    <Content Include="core\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

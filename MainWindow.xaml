@@ -1,0 +1,132 @@
+<Window x:Class="TeamsVoiceWizard.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Teams Voice Wizard">
+
+    <Grid x:Name="RootGrid" Margin="12" RowSpacing="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="120" />
+            <RowDefinition Height="200" />
+        </Grid.RowDefinitions>
+
+        <!-- ROW 0 -->
+        <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,10">
+
+            <TextBlock Text="PSTN Gateway(s) — Gamma shorthand or full FQDNs, comma-separated"
+                       Style="{StaticResource CaptionTextBlockStyle}" />
+
+            <TextBox x:Name="GammaBox"
+                     PlaceholderText="e.g. acme01  or  acme01.part03.ucconnect.co.uk, acme01.part13.ucconnect.co.uk"
+                     TextChanged="GammaBox_TextChanged" />
+
+            <CheckBox x:Name="ChkDerivedTrunk"
+                      Content="Use derived trunk model (Gamma / Operator-managed)"
+                      IsChecked="True"
+                      Checked="ChkDerivedTrunk_Checked"
+                      Unchecked="ChkDerivedTrunk_Unchecked" />
+
+            <TextBlock Text="Site Name"
+                       Style="{StaticResource CaptionTextBlockStyle}" />
+
+            <TextBox x:Name="SiteBox"
+                     PlaceholderText="e.g. London-HQ"
+                     TextChanged="SiteBox_TextChanged" />
+
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="Country (ISO 3166-1 alpha-2)"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}" />
+                <TextBox x:Name="CountryBox"
+                         Text="GB"
+                         Width="90"
+                         MaxLength="2"
+                         TextChanged="CountryBox_TextChanged" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="BtnConnectGraph"
+                        Content="Connect Graph"
+                        Click="BtnConnectGraph_Click" />
+                <Button x:Name="BtnConnectTeams"
+                        Content="Connect Teams"
+                        IsEnabled="False"
+                        Click="BtnConnectTeams_Click" />
+                <Button x:Name="BtnDomainsTxt"
+                        Content="Create Domains + Get TXT"
+                        IsEnabled="False"
+                        Click="BtnDomainsTxt_Click" />
+                <Button x:Name="BtnVerify"
+                        Content="Verify Domains"
+                        IsEnabled="False"
+                        Click="BtnVerify_Click" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button x:Name="BtnLoadSkus"
+                        Content="Load License SKUs"
+                        IsEnabled="False"
+                        Click="BtnLoadSkus_Click" />
+
+                <ComboBox x:Name="SkuDrop"
+                          Width="480"
+                          PlaceholderText="Select a SKU for test objects"
+                          SelectionChanged="SkuDrop_SelectionChanged" />
+
+                <Button x:Name="BtnCreateTestObjs"
+                        Content="Create Test Objects + Assign License"
+                        IsEnabled="False"
+                        Click="BtnCreateTestObjs_Click" />
+
+                <Button x:Name="BtnCleanup"
+                        Content="Cleanup Test Objects"
+                        IsEnabled="False"
+                        Click="BtnCleanup_Click" />
+            </StackPanel>
+
+            <Button x:Name="BtnApplyVoice"
+                    Content="⚙ Apply Voice Configuration"
+                    IsEnabled="False"
+                    Click="BtnApplyVoice_Click" />
+        </StackPanel>
+
+        <!-- ROW 1 -->
+        <Border Grid.Row="1"
+                BorderBrush="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                BorderThickness="1"
+                Padding="6"
+                Margin="0,0,0,6">
+            <ScrollViewer x:Name="OutputScroll"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto">
+                <TextBox x:Name="OutputBox"
+                         IsReadOnly="True"
+                         AcceptsReturn="True"
+                         TextWrapping="NoWrap"
+                         FontFamily="Consolas"
+                         FontSize="12"
+                         Background="Transparent"
+                         BorderThickness="0" />
+            </ScrollViewer>
+        </Border>
+
+        <!-- ROW 2 -->
+        <Border Grid.Row="2"
+                BorderBrush="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                BorderThickness="1"
+                Padding="6">
+            <ScrollViewer x:Name="LogScroll"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <TextBox x:Name="LogBox"
+                         IsReadOnly="True"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         FontSize="11"
+                         Background="Transparent"
+                         BorderThickness="0" />
+            </ScrollViewer>
+        </Border>
+
+    </Grid>
+</Window>
