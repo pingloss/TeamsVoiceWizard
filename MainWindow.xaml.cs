@@ -8,6 +8,7 @@ using TeamsVoiceWizard.Models;
 using TeamsVoiceWizard.Services;
 
 using Windows.Graphics;
+using Windows.Media.AppBroadcasting;
 using WinRT.Interop;
 
 namespace TeamsVoiceWizard;
@@ -284,6 +285,15 @@ public sealed partial class MainWindow : Window
         BtnApplyVoice.IsEnabled = _psReady && _teamsConnected && domainsVerified;
     }
 
+    private void SetBusy(bool busy, string? message = null)
+    {
+        if (!_uiReady) return;
+
+        StatusPanel.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        BusyRing.IsActive = busy;
+        StatusText.Text = message ?? string.Empty;
+    }
+
     // -------------------------
     // Input handlers
     // -------------------------
@@ -320,6 +330,7 @@ public sealed partial class MainWindow : Window
         if (!EnsurePowerShellReady()) return;
 
         BtnConnectGraph.IsEnabled = false;
+        SetBusy(true, "Connecting to Microsoft Graph...");
         try
         {
             AppendLog("Graph: Starting device-code login...");
@@ -335,6 +346,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            SetBusy(false);
             BtnConnectGraph.IsEnabled = true;
             UpdateGuardrails();
         }
@@ -345,6 +357,7 @@ public sealed partial class MainWindow : Window
         if (!EnsurePowerShellReady()) return;
 
         BtnConnectTeams.IsEnabled = false;
+        SetBusy(true, "Connecting to Microsoft Teams...");
         try
         {
             AppendLog("Teams: Starting authentication...");
@@ -359,6 +372,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            SetBusy(false);
             UpdateGuardrails();
         }
     }
@@ -368,6 +382,7 @@ public sealed partial class MainWindow : Window
         if (!EnsurePowerShellReady()) return;
 
         BtnDomainsTxt.IsEnabled = false;
+        SetBusy(true, "Creating domains and generating TXT records...");
         try
         {
             var endpoint = (GammaBox?.Text ?? "").Trim();
@@ -404,6 +419,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            SetBusy(false);
             BtnDomainsTxt.IsEnabled = true;
             UpdateGuardrails();
         }
@@ -414,6 +430,7 @@ public sealed partial class MainWindow : Window
         if (!EnsurePowerShellReady()) return;
 
         BtnVerify.IsEnabled = false;
+        SetBusy(true, "Verifying domain ownership...");
         try
         {
             if (_state.Domains.Count == 0) { AppendLog("No domains to verify."); return; }
@@ -436,6 +453,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            SetBusy(false);
             BtnVerify.IsEnabled = true;
             UpdateGuardrails();
         }
@@ -446,6 +464,7 @@ public sealed partial class MainWindow : Window
         if (!EnsurePowerShellReady()) return;
 
         BtnLoadSkus.IsEnabled = false;
+        SetBusy(true, "Loading license SKUs...");
         try
         {
             if (!_graphConnected) { AppendLog("Graph not connected. Connect Graph first."); return; }
@@ -474,6 +493,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            SetBusy(false);
             BtnLoadSkus.IsEnabled = true;
             UpdateGuardrails();
         }
@@ -484,6 +504,7 @@ public sealed partial class MainWindow : Window
         if (!EnsurePowerShellReady()) return;
 
         BtnCreateTestObjs.IsEnabled = false;
+        SetBusy(true, "Creating test users and resource accounts...");
         try
         {
             if (!_graphConnected) { AppendLog("Graph not connected."); return; }
@@ -511,6 +532,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            SetBusy(false);
             BtnCreateTestObjs.IsEnabled = true;
             UpdateGuardrails();
         }
@@ -521,6 +543,7 @@ public sealed partial class MainWindow : Window
         if (!EnsurePowerShellReady()) return;
 
         BtnCleanup.IsEnabled = false;
+        SetBusy(true, "Cleaning up test objects...");
         try
         {
             if (_state.CreatedUsers.Count == 0 && _state.CreatedResourceAccounts.Count == 0)
@@ -542,6 +565,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            SetBusy(false);
             UpdateGuardrails();
         }
     }
@@ -551,6 +575,7 @@ public sealed partial class MainWindow : Window
         if (!EnsurePowerShellReady()) return;
 
         BtnApplyVoice.IsEnabled = false;
+        SetBusy(true, "Applying tenant-wide Teams Phone configuration...");
         try
         {
             if (!_teamsConnected) { AppendLog("Teams not connected. Connect Teams first."); return; }
@@ -566,6 +591,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            SetBusy(false);
             UpdateGuardrails();
         }
     }
