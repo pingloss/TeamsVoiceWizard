@@ -1,0 +1,7 @@
+<Project>
+	<PropertyGroup>
+		<BaseOutputPath>$(UserProfile)\VSBuilds\$(MSBuildProjectName)\bin\</BaseOutputPath>
+		<BaseIntermediateOutputPath>$(UserProfile)\VSBuilds\$(MSBuildProjectName)\obj\</BaseIntermediateOutputPath>
+		<PublishDir>$(UserProfile)\VSBuilds\$(MSBuildProjectName)\publish\</PublishDir>
+	</PropertyGroup>
+</Project>

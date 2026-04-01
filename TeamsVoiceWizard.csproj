@@ -16,6 +16,7 @@
 
     <DefaultLanguage>en-GB</DefaultLanguage>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
