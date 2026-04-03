@@ -363,7 +363,7 @@ public sealed partial class MainWindow : Window
         try
         {
             AppendLog("Graph: Starting device-code login...");
-            var scopes = new[] { "User.ReadWrite.All", "Domain.ReadWrite.All", "Organization.Read.All" };
+            var scopes = new[] { "User.ReadWrite.All", "Domain.ReadWrite.All", "Organization.Read.All", "TeamsPolicyUserAssign.ReadWrite.All", "TeamsTelephoneNumber.ReadWrite.All" };
             await _ps!.ConnectGraphAsync(scopes);
 
             _graphConnected = await _ps.IsGraphConnectedAsync();
