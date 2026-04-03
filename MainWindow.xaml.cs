@@ -48,6 +48,10 @@ public sealed partial class MainWindow : Window
     private readonly ObservableCollection<PhoneNumberRecord> _phoneRecords = new();
     private readonly PolicyCaches _policyCaches = new();
 
+    private bool _isLoadingDialPlans = false;
+    private bool _isLoadingVRPolicies = false;
+    private Dictionary<string, string> _usersCache = new();
+
 
 
     public MainWindow()
@@ -802,6 +806,82 @@ public sealed partial class MainWindow : Window
         {
             UserLoadingRing.IsActive = false;
             _isLoadingUsers = false;
+        }
+    }
+
+    private async void DialPlanComboBox_DropDownOpened(object sender, object e)
+    {
+        if (_isLoadingDialPlans || DialPlanComboBox.Items?.Count > 0)
+            return;
+
+        _isLoadingDialPlans = true;
+        DialPlanLoadingRing.IsActive = true;
+
+        try
+        {
+            if (!EnsurePowerShellReady()) return;
+
+            var dialPlans = await _ps!.RunScalarAsync<List<string>>("Get-CsTenantDialPlan | Select-Object -ExpandProperty Identity");
+
+            if (dialPlans == null || dialPlans.Count == 0)
+            {
+                AppendLog("Phone Management: No dial plans found.");
+                return;
+            }
+
+            foreach (var plan in dialPlans)
+            {
+                DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = plan });
+            }
+
+            AppendLog($"Phone Management: Loaded {dialPlans.Count} dial plan(s).");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Phone Management: Failed to load dial plans — {ex.Message}");
+        }
+        finally
+        {
+            DialPlanLoadingRing.IsActive = false;
+            _isLoadingDialPlans = false;
+        }
+    }
+
+    private async void VoiceRoutingPolicyComboBox_DropDownOpened(object sender, object e)
+    {
+        if (_isLoadingVRPolicies || VoiceRoutingPolicyComboBox.Items?.Count > 0)
+            return;
+
+        _isLoadingVRPolicies = true;
+        VRPolicyLoadingRing.IsActive = true;
+
+        try
+        {
+            if (!EnsurePowerShellReady()) return;
+
+            var policies = await _ps!.RunScalarAsync<List<string>>("Get-CsOnlineVoiceRoutingPolicy | Select-Object -ExpandProperty Identity");
+
+            if (policies == null || policies.Count == 0)
+            {
+                AppendLog("Phone Management: No voice routing policies found.");
+                return;
+            }
+
+            foreach (var policy in policies)
+            {
+                VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = policy });
+            }
+
+            AppendLog($"Phone Management: Loaded {policies.Count} voice routing policy(s).");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Phone Management: Failed to load voice routing policies — {ex.Message}");
+        }
+        finally
+        {
+            VRPolicyLoadingRing.IsActive = false;
+            _isLoadingVRPolicies = false;
         }
     }
 
