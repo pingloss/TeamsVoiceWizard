@@ -220,13 +220,8 @@ public sealed class GraphPhoneService
     /// </summary>
     public async Task<List<UserEntry>> GetTeamsPhoneLicensedUsersAsync()
     {
-        // Service plan ID for MCOEV (Microsoft 365 Phone System)
-        const string phonePlanId = "e43b5b99-8dfb-405f-9987-dc307f34bcbd";
-
         var users = new List<UserEntry>();
-        string? next = "https://graph.microsoft.com/v1.0/users" +
-            $"?$filter=assignedPlans/any(a:a/servicePlanId eq {phonePlanId} and a/capabilityStatus eq 'Enabled')" +
-            "&$select=id,displayName,userPrincipalName&$top=999";
+        string? next = "https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName&$top=999";
 
         while (next is not null)
         {
@@ -234,8 +229,8 @@ public sealed class GraphPhoneService
 
             foreach (var u in page.Value)
             {
-                if (!string.IsNullOrWhiteSpace(u.Id))
-                    users.Add(new UserEntry(u.Id, u.Upn ?? "", u.DisplayName ?? u.Upn ?? ""));
+                if (!string.IsNullOrWhiteSpace(u.Id) && !string.IsNullOrWhiteSpace(u.Upn))
+                    users.Add(new UserEntry(u.Id, u.Upn, u.DisplayName ?? u.Upn ?? ""));
             }
 
             next = page.NextLink;
