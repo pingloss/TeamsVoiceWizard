@@ -707,6 +707,70 @@ public sealed partial class MainWindow : Window
         PopulateSidePanel(selected);
     }
 
+    private async Task EnsurePoliciesLoadedAsync()
+    {
+        // Both already cached — nothing to do
+        if (_policyCaches.DialPlans.Count > 0 && _policyCaches.VoiceRoutingPolicies.Count > 0)
+            return;
+
+        if (!EnsurePowerShellReady(logIfNotReady: false)) return;
+
+        DialPlanLoadingRing.IsActive = true;
+        VRPolicyLoadingRing.IsActive = true;
+
+        try
+        {
+            // Run both PS calls concurrently
+            var dialTask = _policyCaches.DialPlans.Count == 0
+                ? _ps!.GetDialPlansAsync()
+                : Task.FromResult((List<PolicyEntry>)_policyCaches.DialPlans.ToList());
+
+            var vrTask = _policyCaches.VoiceRoutingPolicies.Count == 0
+                ? _ps!.GetVoiceRoutingPoliciesAsync()
+                : Task.FromResult((List<PolicyEntry>)_policyCaches.VoiceRoutingPolicies.ToList());
+
+            await Task.WhenAll(dialTask, vrTask);
+
+            var dialPlans = await dialTask;
+            var vrPolicies = await vrTask;
+
+            if (dialPlans?.Count > 0)
+            {
+                _policyCaches.DialPlans = dialPlans;
+
+                // Populate DialPlan ComboBox — clear placeholder then add all items
+                DialPlanComboBox.Items?.Clear();
+                DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
+                foreach (var plan in dialPlans)
+                    DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = plan.DisplayName, Tag = plan.Id });
+
+                AppendLog($"Phone Management: Loaded {dialPlans.Count} dial plan(s).");
+            }
+
+            if (vrPolicies?.Count > 0)
+            {
+                _policyCaches.VoiceRoutingPolicies = vrPolicies;
+
+                // Populate VRP ComboBox — clear placeholder then add all items
+                VoiceRoutingPolicyComboBox.Items?.Clear();
+                VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
+                foreach (var policy in vrPolicies)
+                    VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = policy.DisplayName, Tag = policy.Id });
+
+                AppendLog($"Phone Management: Loaded {vrPolicies.Count} voice routing policy(s).");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Phone Management: Failed to load policies — {ex.Message}");
+        }
+        finally
+        {
+            DialPlanLoadingRing.IsActive = false;
+            VRPolicyLoadingRing.IsActive = false;
+        }
+    }
+
     /// <summary>
     /// Populates the side panel with the selected record's data.
     /// Section A (Number Info) always shows.
@@ -736,6 +800,7 @@ public sealed partial class MainWindow : Window
         if (record.CanAssignPolicies)
         {
             PopulatePolicyComboBoxes(record);
+            _ = EnsurePoliciesLoadedAsync();
         }
 
         // Reset the Apply button (no changes yet)
@@ -811,124 +876,14 @@ public sealed partial class MainWindow : Window
 
     private async void DialPlanComboBox_DropDownOpened(object sender, object e)
     {
-        AppendLog("DEBUG: DialPlanComboBox_DropDownOpened CALLED");
-
-        // ✅ Check if policies are already cached, not if ComboBox has items
-        if (_isLoadingDialPlans || _policyCaches.DialPlans.Count > 0)
-        {
-            AppendLog($"DEBUG: Returning early - loading={_isLoadingDialPlans} cached count={_policyCaches.DialPlans.Count}");
-            return;
-        }
-
-        _isLoadingDialPlans = true;
-        DialPlanLoadingRing.IsActive = true;
-
-        try
-        {
-            if (!EnsurePowerShellReady())
-            {
-                AppendLog("DEBUG: PowerShell not ready");
-                return;
-            }
-
-            var dialPlans = await _ps!.GetDialPlansAsync();
-            AppendLog($"DEBUG: GetDialPlansAsync returned {dialPlans?.Count ?? 0} items");
-
-            if (dialPlans == null || dialPlans.Count == 0)
-            {
-                AppendLog("Phone Management: No dial plans found.");
-                return;
-            }
-
-            // ✅ Update the cache property
-            if (_policyCaches != null)
-            {
-                _policyCaches.DialPlans = dialPlans;
-                AppendLog($"DEBUG: Cached {dialPlans.Count} dial plans");
-            }
-
-            // ✅ Clear and repopulate ComboBox with actual policies + placeholder
-            DialPlanComboBox.Items?.Clear();
-            DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
-
-            foreach (var plan in dialPlans)
-            {
-                AppendLog($"DEBUG: Adding plan - DisplayName='{plan.DisplayName}' Id='{plan.Id}'");
-                DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = plan.DisplayName, Tag = plan.Id });
-            }
-
-            AppendLog($"Phone Management: Loaded {dialPlans.Count} dial plan(s).");
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"Phone Management: Failed to load dial plans — {ex.Message}");
-        }
-        finally
-        {
-            DialPlanLoadingRing.IsActive = false;
-            _isLoadingDialPlans = false;
-        }
+        if (_isLoadingDialPlans || _policyCaches.DialPlans.Count > 0) return;
+        await EnsurePoliciesLoadedAsync();
     }
 
     private async void VoiceRoutingPolicyComboBox_DropDownOpened(object sender, object e)
     {
-        AppendLog("DEBUG: VoiceRoutingPolicyComboBox_DropDownOpened CALLED");
-
-        // ✅ Check if policies are already cached, not if ComboBox has items
-        if (_isLoadingVRPolicies || _policyCaches.VoiceRoutingPolicies.Count > 0)
-        {
-            AppendLog($"DEBUG: Returning early - loading={_isLoadingVRPolicies} cached count={_policyCaches.VoiceRoutingPolicies.Count}");
-            return;
-        }
-
-        _isLoadingVRPolicies = true;
-        VRPolicyLoadingRing.IsActive = true;
-
-        try
-        {
-            if (!EnsurePowerShellReady())
-            {
-                AppendLog("DEBUG: PowerShell not ready");
-                return;
-            }
-
-            var policies = await _ps!.GetVoiceRoutingPoliciesAsync();
-            AppendLog($"DEBUG: GetVoiceRoutingPoliciesAsync returned {policies?.Count ?? 0} items");
-
-            if (policies == null || policies.Count == 0)
-            {
-                AppendLog("Phone Management: No voice routing policies found.");
-                return;
-            }
-
-            // ✅ Update the cache property
-            if (_policyCaches != null)
-            {
-                _policyCaches.VoiceRoutingPolicies = policies;
-                AppendLog($"DEBUG: Cached {policies.Count} voice routing policies");
-            }
-
-            // ✅ Clear and repopulate ComboBox with actual policies + placeholder
-            VoiceRoutingPolicyComboBox.Items?.Clear();
-            VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
-
-            foreach (var policy in policies)
-            {
-                AppendLog($"DEBUG: Adding policy - DisplayName='{policy.DisplayName}' Id='{policy.Id}'");
-                VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = policy.DisplayName, Tag = policy.Id });
-            }
-
-            AppendLog($"Phone Management: Loaded {policies.Count} voice routing policy(s).");
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"Phone Management: Failed to load voice routing policies — {ex.Message}");
-        }
-        finally
-        {
-            VRPolicyLoadingRing.IsActive = false;
-            _isLoadingVRPolicies = false;
-        }
+        if (_isLoadingVRPolicies || _policyCaches.VoiceRoutingPolicies.Count > 0) return;
+        await EnsurePoliciesLoadedAsync();
     }
 
     private void UserComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
