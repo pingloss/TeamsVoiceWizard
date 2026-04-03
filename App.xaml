@@ -3,7 +3,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
-    xmlns:local="using:TeamsVoiceWizard">
+    xmlns:local="using:TeamsVoiceWizard"
+    xmlns:converters="using:TeamsVoiceWizard.Converters">
 
     <Application.Resources>
         <!-- WinUI 3 / Fluent control styles -->
@@ -14,10 +15,10 @@
         <!-- ════════════════════════════════════════════════════════ -->
 
         <!-- Convert bool to Visibility (true = Visible, false = Collapsed) -->
-        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+        <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
 
         <!-- Convert bool to Visibility inverted (true = Collapsed, false = Visible) -->
-        <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
 
     </Application.Resources>
 

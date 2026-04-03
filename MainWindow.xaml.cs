@@ -772,7 +772,7 @@ public sealed partial class MainWindow : Window
             // If users cache is empty, fetch from Graph
             if (_usersCache.Count == 0)
             {
-                var licensedUsers = await _graphPhone!.GetLicensedTeamsPhoneUsersAsync();
+                var licensedUsers = await _graphPhone!.GetTeamsPhoneLicensedUsersAsync();
 
                 foreach (var (userId, displayName, upn) in licensedUsers)
                 {

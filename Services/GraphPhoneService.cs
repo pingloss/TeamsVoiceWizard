@@ -8,6 +8,10 @@ namespace TeamsVoiceWizard.Services;
 
 // ── Internal Graph DTOs ────────────────────────────────────────────────────────
 
+/// <summary>
+/// DTO for GET /admin/teams/telephoneNumbers/numberAssignments
+/// Represents a single phone number assignment in the tenant.
+/// </summary>
 internal record GraphNumberAssignment(
     [property: JsonPropertyName("telephoneNumber")] string TelephoneNumber,
     [property: JsonPropertyName("numberType")] string NumberType,
@@ -16,19 +20,32 @@ internal record GraphNumberAssignment(
     [property: JsonPropertyName("activationState")] string? ActivationState
 );
 
+/// <summary>
+/// DTO for Graph /users endpoint.
+/// Used in batch requests to resolve user details.
+/// </summary>
 internal record GraphUser(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("displayName")] string? DisplayName,
     [property: JsonPropertyName("userPrincipalName")] string? Upn
 );
 
+/// <summary>
+/// Generic response envelope for Graph list endpoints.
+/// Handles pagination via @odata.nextLink.
+/// </summary>
 internal record GraphListResponse<T>(
     [property: JsonPropertyName("value")] List<T> Value,
     [property: JsonPropertyName("@odata.nextLink")] string? NextLink
 );
 
-// ── Service ───────────────────────────────────────────────────────────────────
+// ── Service ────────────────────────────────────────────────────────────────────
 
+/// <summary>
+/// Graph API client for Teams phone number and policy management.
+/// Uses bearer token authentication with delegated scopes.
+/// All methods handle pagination and error cases internally.
+/// </summary>
 public sealed class GraphPhoneService
 {
     private readonly Func<Task<string>> _getToken;
@@ -47,6 +64,10 @@ public sealed class GraphPhoneService
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Builds an authenticated HTTP request with the current access token.
+    /// Includes JSON body serialization if provided.
+    /// </summary>
     private async Task<HttpRequestMessage> BuildRequestAsync(
         HttpMethod method, string url, object? body = null)
     {
@@ -61,6 +82,9 @@ public sealed class GraphPhoneService
         return req;
     }
 
+    /// <summary>
+    /// GET request helper. Deserializes response as JSON.
+    /// </summary>
     private async Task<T> GetAsync<T>(string url)
     {
         var req = await BuildRequestAsync(HttpMethod.Get, url).ConfigureAwait(false);
@@ -70,6 +94,9 @@ public sealed class GraphPhoneService
         return JsonSerializer.Deserialize<T>(json, _jsonOpts)!;
     }
 
+    /// <summary>
+    /// POST request helper. Sends JSON body.
+    /// </summary>
     private async Task PostAsync(string url, object body)
     {
         var req = await BuildRequestAsync(HttpMethod.Post, url, body).ConfigureAwait(false);
@@ -77,6 +104,9 @@ public sealed class GraphPhoneService
         await EnsureSuccessAsync(resp).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Checks HTTP response success. Throws with Graph error details on failure.
+    /// </summary>
     private static async Task EnsureSuccessAsync(HttpResponseMessage resp)
     {
         if (resp.IsSuccessStatusCode) return;
@@ -85,10 +115,12 @@ public sealed class GraphPhoneService
             $"Graph API error {(int)resp.StatusCode} {resp.ReasonPhrase}: {error}");
     }
 
-    // ── Public API ────────────────────────────────────────────────────────────
+    // ── Public API ───────────────────────────────────────────────────��────────
 
     /// <summary>
     /// Returns all number assignments from the tenant, handling Graph pagination.
+    /// Calls: GET /v1.0/admin/teams/telephoneNumbers/numberAssignments
+    /// Requires: TeamsPhoneNumber.ReadWrite.All scope
     /// </summary>
     public async Task<List<PhoneNumberRecord>> GetNumberAssignmentsAsync()
     {
@@ -119,7 +151,9 @@ public sealed class GraphPhoneService
 
     /// <summary>
     /// Batch-resolves a set of user Object IDs to display name + UPN.
-    /// Uses Graph $batch (max 20 per request) to avoid N+1 HTTP calls.
+    /// Uses Graph $batch endpoint (max 20 per request) to avoid N+1 HTTP calls.
+    /// Calls: POST /v1.0/$batch with multiple GET /users/{id} requests
+    /// Requires: User.ReadWrite.All scope
     /// </summary>
     public async Task<Dictionary<string, (string DisplayName, string Upn)>>
         ResolveUsersAsync(IEnumerable<string> objectIds)
@@ -133,9 +167,12 @@ public sealed class GraphPhoneService
 
         const int batchSize = 20;
 
+        // Batch into chunks of 20 (Graph $batch limit)
         for (int i = 0; i < ids.Count; i += batchSize)
         {
             var chunk = ids.Skip(i).Take(batchSize).ToList();
+
+            // Build batch request array
             var requests = chunk.Select((id, idx) => new
             {
                 id = idx.ToString(),
@@ -156,6 +193,7 @@ public sealed class GraphPhoneService
             var json = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
             using var doc = JsonDocument.Parse(json);
 
+            // Parse batch responses
             foreach (var response in doc.RootElement.GetProperty("responses").EnumerateArray())
             {
                 if (response.GetProperty("status").GetInt32() != 200) continue;
@@ -175,7 +213,10 @@ public sealed class GraphPhoneService
 
     /// <summary>
     /// Returns all users who have the Teams Phone System service plan enabled.
-    /// Results are used to populate the user assignment dropdown.
+    /// Results are used to populate the user assignment dropdown in the side panel.
+    /// Calls: GET /v1.0/users with $filter on assignedPlans
+    /// Requires: User.ReadWrite.All scope
+    /// Note: Teams Phone System service plan ID = e43b5b99-8dfb-405f-9987-dc307f34bcbd
     /// </summary>
     public async Task<List<UserEntry>> GetTeamsPhoneLicensedUsersAsync()
     {
@@ -206,6 +247,8 @@ public sealed class GraphPhoneService
 
     /// <summary>
     /// Assigns a telephone number to a user.
+    /// Calls: POST /v1.0/admin/teams/telephoneNumbers/numberAssignments/assignNumber
+    /// Requires: TeamsPhoneNumber.ReadWrite.All scope
     /// </summary>
     public Task AssignNumberAsync(string telephoneNumber, string userId) =>
         PostAsync(
@@ -219,6 +262,8 @@ public sealed class GraphPhoneService
 
     /// <summary>
     /// Unassigns a telephone number from its current user.
+    /// Calls: POST /v1.0/admin/teams/telephoneNumbers/numberAssignments/unassignNumber
+    /// Requires: TeamsPhoneNumber.ReadWrite.All scope
     /// </summary>
     public Task UnassignNumberAsync(string telephoneNumber) =>
         PostAsync(
@@ -228,6 +273,8 @@ public sealed class GraphPhoneService
     /// <summary>
     /// Assigns dial plan and/or voice routing policy to a user in a single batch call.
     /// Null values are skipped — only non-null policies are included in the request.
+    /// Calls: POST /v1.0/admin/teams/policy/userAssignments/assign
+    /// Requires: TeamsPolicyUserAssign.ReadWrite.All scope
     /// </summary>
     public Task AssignPoliciesAsync(string userId, string? dialPlanId, string? vrPolicyId)
     {
