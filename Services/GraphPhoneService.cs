@@ -225,7 +225,7 @@ public sealed class GraphPhoneService
 
         var users = new List<UserEntry>();
         string? next = "https://graph.microsoft.com/v1.0/users" +
-            $"?$filter=assignedPlans/any(a:a/servicePlanId eq guid'{phonePlanId}' and a/capabilityStatus eq 'Enabled')" +
+            $"?$filter=assignedPlans/any(a:a/servicePlanId eq {phonePlanId} and a/capabilityStatus eq 'Enabled')" +
             "&$select=id,displayName,userPrincipalName&$top=999";
 
         while (next is not null)
