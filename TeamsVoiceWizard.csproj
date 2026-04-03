@@ -22,6 +22,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.6" />
     <PackageReference Include="System.Management.Automation" Version="7.4.6" />
+	<PackageReference Include="Uno.CommunityToolkit.WinUI.UI.Controls.DataGrid" Version="7.1.100" />
   </ItemGroup>
 
   <ItemGroup>
