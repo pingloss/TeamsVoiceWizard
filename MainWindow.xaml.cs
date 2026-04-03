@@ -688,7 +688,7 @@ public sealed partial class MainWindow : Window
     // ════════════════════════════════════════════════════════════════════════════════
 
     private PhoneNumberRecord? _currentlySelectedRecord;
-    private Dictionary<string, string> _usersCache = new();  // userId -> displayName cache
+    // private Dictionary<string, string> _usersCache = new();  // userId -> displayName cache
     private bool _isLoadingUsers;
 
     private void NumbersGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -821,7 +821,7 @@ public sealed partial class MainWindow : Window
         {
             if (!EnsurePowerShellReady()) return;
 
-            var dialPlans = await _ps!.RunScalarAsync<List<string>>("Get-CsTenantDialPlan | Select-Object -ExpandProperty Identity");
+            var dialPlans = await _ps!.GetDialPlansAsync();
 
             if (dialPlans == null || dialPlans.Count == 0)
             {
@@ -859,7 +859,7 @@ public sealed partial class MainWindow : Window
         {
             if (!EnsurePowerShellReady()) return;
 
-            var policies = await _ps!.RunScalarAsync<List<string>>("Get-CsOnlineVoiceRoutingPolicy | Select-Object -ExpandProperty Identity");
+            var policies = await _ps!.GetVoiceRoutingPoliciesAsync();
 
             if (policies == null || policies.Count == 0)
             {
