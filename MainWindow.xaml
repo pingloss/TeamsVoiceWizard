@@ -259,11 +259,182 @@
                             BorderThickness="1,0,0,0"
                             BorderBrush="{ThemeResource SystemControlForegroundBaseMediumBrush}"
                             Padding="12">
-                        <TextBlock x:Name="SidePanelPlaceholder"
-                                   Text="Select a number to manage."
-                                   Style="{StaticResource CaptionTextBlockStyle}"
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Spacing="16">
+                                <!-- === SECTION A: Number Info (Always visible when panel open) === -->
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Phone Number Details"
+                           FontWeight="SemiBold"
+                           Style="{StaticResource BaseTextBlockStyle}" />
+
+                                    <Grid RowSpacing="6">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="100" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0"
+                               Text="Number:"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1"
+                               x:Name="TxtPhoneNumber"
+                               Text=""
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               FontFamily="Consolas" />
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0"
+                               Text="Type:"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1"
+                               x:Name="TxtNumberType"
+                               Text=""
+                               Style="{StaticResource CaptionTextBlockStyle}" />
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0"
+                               Text="Status:"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1"
+                               x:Name="TxtStatus"
+                               Text=""
+                               Style="{StaticResource CaptionTextBlockStyle}" />
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0"
+                               Text="Current User:"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1"
+                               x:Name="TxtCurrentUser"
+                               Text="(unassigned)"
+                               Style="{StaticResource CaptionTextBlockStyle}" />
+                                    </Grid>
+                                </StackPanel>
+
+                                <!-- Divider -->
+                                <Border Height="1"
+                    Background="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                    Opacity="0.3" />
+
+                                <!-- === SECTION B: User Assignment === -->
+                                <StackPanel x:Name="UserAssignmentSection"
+                        Spacing="8"
+                        Visibility="Visible">
+                                    <TextBlock Text="Assign User"
+                           FontWeight="SemiBold"
+                           Style="{StaticResource BaseTextBlockStyle}" />
+
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="Teams Phone User:"
                                    VerticalAlignment="Center"
-                                   HorizontalAlignment="Center" />
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                                            <ProgressRing x:Name="UserLoadingRing"
+                                      IsActive="False"
+                                      Width="14" Height="14"
+                                      VerticalAlignment="Center" />
+                                        </StackPanel>
+
+                                        <ComboBox x:Name="UserComboBox"
+                              HorizontalAlignment="Stretch"
+                              PlaceholderText="Select a user"
+                              SelectionChanged="UserComboBox_SelectionChanged" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Divider -->
+                                <Border Height="1"
+                    Background="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                    Opacity="0.3" />
+
+                                <!-- === SECTION C: Policy Assignment (visible only for Direct Routing + assigned) === -->
+                                <StackPanel x:Name="PolicyAssignmentSection"
+                        Spacing="8"
+                        Visibility="Collapsed">
+                                    <TextBlock Text="Direct Routing Policies"
+                           FontWeight="SemiBold"
+                           Style="{StaticResource BaseTextBlockStyle}" />
+
+                                    <!-- Dial Plan -->
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="Dial Plan:"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                                            <ProgressRing x:Name="DialPlanLoadingRing"
+                                      IsActive="False"
+                                      Width="14" Height="14"
+                                      VerticalAlignment="Center" />
+                                        </StackPanel>
+
+                                        <ComboBox x:Name="DialPlanComboBox"
+                              HorizontalAlignment="Stretch"
+                              PlaceholderText="None"
+                              SelectionChanged="DialPlanComboBox_SelectionChanged" />
+
+                                        <TextBlock x:Name="DialPlanNote"
+                               Text="Leave blank to keep current assignment"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                               FontSize="10"
+                               Visibility="Collapsed" />
+                                    </StackPanel>
+
+                                    <!-- Voice Routing Policy -->
+                                    <StackPanel Spacing="4">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="Voice Routing Policy:"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                                            <ProgressRing x:Name="VRPolicyLoadingRing"
+                                      IsActive="False"
+                                      Width="14" Height="14"
+                                      VerticalAlignment="Center" />
+                                        </StackPanel>
+
+                                        <ComboBox x:Name="VoiceRoutingPolicyComboBox"
+                              HorizontalAlignment="Stretch"
+                              PlaceholderText="None"
+                              SelectionChanged="VoiceRoutingPolicyComboBox_SelectionChanged" />
+
+                                        <TextBlock x:Name="VRPolicyNote"
+                               Text="Leave blank to keep current assignment"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                               FontSize="10"
+                               Visibility="Collapsed" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <!-- Divider -->
+                                <Border Height="1"
+                    Background="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                    Opacity="0.3" />
+
+                                <!-- === Apply Button === -->
+                                <Button x:Name="BtnApplySingleNumber"
+                    Content="Apply Changes"
+                    HorizontalAlignment="Stretch"
+                    IsEnabled="False"
+                    Click="BtnApplySingleNumber_Click"
+                    Style="{StaticResource AccentButtonStyle}" />
+
+                                <!-- Status message -->
+                                <TextBlock x:Name="SidePanelStatusText"
+                       Text=""
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                       TextWrapping="Wrap"
+                       Visibility="Collapsed" />
+                            </StackPanel>
+                        </ScrollViewer>
                     </Border>
 
                 </Grid>
