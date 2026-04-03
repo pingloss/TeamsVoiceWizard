@@ -811,17 +811,28 @@ public sealed partial class MainWindow : Window
 
     private async void DialPlanComboBox_DropDownOpened(object sender, object e)
     {
-        if (_isLoadingDialPlans || DialPlanComboBox.Items?.Count > 0)
+        AppendLog("DEBUG: DialPlanComboBox_DropDownOpened CALLED");
+
+        // ✅ Check if policies are already cached, not if ComboBox has items
+        if (_isLoadingDialPlans || _policyCaches.DialPlans.Count > 0)
+        {
+            AppendLog($"DEBUG: Returning early - loading={_isLoadingDialPlans} cached count={_policyCaches.DialPlans.Count}");
             return;
+        }
 
         _isLoadingDialPlans = true;
         DialPlanLoadingRing.IsActive = true;
 
         try
         {
-            if (!EnsurePowerShellReady()) return;
+            if (!EnsurePowerShellReady())
+            {
+                AppendLog("DEBUG: PowerShell not ready");
+                return;
+            }
 
             var dialPlans = await _ps!.GetDialPlansAsync();
+            AppendLog($"DEBUG: GetDialPlansAsync returned {dialPlans?.Count ?? 0} items");
 
             if (dialPlans == null || dialPlans.Count == 0)
             {
@@ -829,8 +840,20 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
+            // ✅ Update the cache property
+            if (_policyCaches != null)
+            {
+                _policyCaches.DialPlans = dialPlans;
+                AppendLog($"DEBUG: Cached {dialPlans.Count} dial plans");
+            }
+
+            // ✅ Clear and repopulate ComboBox with actual policies + placeholder
+            DialPlanComboBox.Items?.Clear();
+            DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
+
             foreach (var plan in dialPlans)
             {
+                AppendLog($"DEBUG: Adding plan - DisplayName='{plan.DisplayName}' Id='{plan.Id}'");
                 DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = plan.DisplayName, Tag = plan.Id });
             }
 
@@ -849,17 +872,28 @@ public sealed partial class MainWindow : Window
 
     private async void VoiceRoutingPolicyComboBox_DropDownOpened(object sender, object e)
     {
-        if (_isLoadingVRPolicies || VoiceRoutingPolicyComboBox.Items?.Count > 0)
+        AppendLog("DEBUG: VoiceRoutingPolicyComboBox_DropDownOpened CALLED");
+
+        // ✅ Check if policies are already cached, not if ComboBox has items
+        if (_isLoadingVRPolicies || _policyCaches.VoiceRoutingPolicies.Count > 0)
+        {
+            AppendLog($"DEBUG: Returning early - loading={_isLoadingVRPolicies} cached count={_policyCaches.VoiceRoutingPolicies.Count}");
             return;
+        }
 
         _isLoadingVRPolicies = true;
         VRPolicyLoadingRing.IsActive = true;
 
         try
         {
-            if (!EnsurePowerShellReady()) return;
+            if (!EnsurePowerShellReady())
+            {
+                AppendLog("DEBUG: PowerShell not ready");
+                return;
+            }
 
             var policies = await _ps!.GetVoiceRoutingPoliciesAsync();
+            AppendLog($"DEBUG: GetVoiceRoutingPoliciesAsync returned {policies?.Count ?? 0} items");
 
             if (policies == null || policies.Count == 0)
             {
@@ -867,8 +901,20 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
+            // ✅ Update the cache property
+            if (_policyCaches != null)
+            {
+                _policyCaches.VoiceRoutingPolicies = policies;
+                AppendLog($"DEBUG: Cached {policies.Count} voice routing policies");
+            }
+
+            // ✅ Clear and repopulate ComboBox with actual policies + placeholder
+            VoiceRoutingPolicyComboBox.Items?.Clear();
+            VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
+
             foreach (var policy in policies)
             {
+                AppendLog($"DEBUG: Adding policy - DisplayName='{policy.DisplayName}' Id='{policy.Id}'");
                 VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = policy.DisplayName, Tag = policy.Id });
             }
 
