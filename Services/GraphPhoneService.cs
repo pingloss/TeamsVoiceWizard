@@ -125,7 +125,7 @@ public sealed class GraphPhoneService
     public async Task<List<PhoneNumberRecord>> GetNumberAssignmentsAsync()
     {
         var records = new List<PhoneNumberRecord>();
-        string? next = "https://graph.microsoft.com/v1.0/admin/teams/telephoneNumbers/numberAssignments";
+        string? next = "https://graph.microsoft.com/v1.0/admin/teams/telephoneNumberManagement/numberAssignments";
 
         while (next is not null)
         {
@@ -252,7 +252,7 @@ public sealed class GraphPhoneService
     /// </summary>
     public Task AssignNumberAsync(string telephoneNumber, string userId) =>
         PostAsync(
-            "https://graph.microsoft.com/v1.0/admin/teams/telephoneNumbers/numberAssignments/assignNumber",
+            "https://graph.microsoft.com/v1.0/admin/teams/telephoneNumberManagement/numberAssignments/assignNumber",
             new
             {
                 telephoneNumber,
@@ -267,7 +267,7 @@ public sealed class GraphPhoneService
     /// </summary>
     public Task UnassignNumberAsync(string telephoneNumber) =>
         PostAsync(
-            "https://graph.microsoft.com/v1.0/admin/teams/telephoneNumbers/numberAssignments/unassignNumber",
+            "https://graph.microsoft.com/v1.0/admin/teams/telephoneNumberManagement/numberAssignments/unassignNumber",
             new { telephoneNumber });
 
     /// <summary>
