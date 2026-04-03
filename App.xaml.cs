@@ -1,3 +1,5 @@
+using Microsoft.UI.Xaml;
+
 namespace TeamsVoiceWizard;
 
 public partial class App : Application

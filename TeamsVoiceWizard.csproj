@@ -1,8 +1,10 @@
-<Project Sdk="Uno.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!-- Windows-only target. Uno lets you add net9.0-ios, net9.0-android, etc. later -->
     <TargetFramework>net9.0-windows10.0.19041</TargetFramework>
+
+	<WindowsPackageType>None</WindowsPackageType>
 
     <OutputType>WinExe</OutputType>
     <RootNamespace>TeamsVoiceWizard</RootNamespace>
@@ -11,8 +13,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
 
-    <!-- Single-project layout -->
-    <UnoSingleProject>true</UnoSingleProject>
 
     <DefaultLanguage>en-GB</DefaultLanguage>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
@@ -20,9 +20,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+	<PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260317003" />
+    <PackageReference Include="CommunityToolkit.WinUI.UI.Controls.DataGrid" Version="7.1.2" />
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.6" />
     <PackageReference Include="System.Management.Automation" Version="7.4.6" />
-	<PackageReference Include="Uno.CommunityToolkit.WinUI.UI.Controls.DataGrid" Version="7.1.100" />
   </ItemGroup>
 
   <ItemGroup>

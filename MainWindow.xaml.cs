@@ -1,6 +1,9 @@
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text;
 
@@ -10,6 +13,11 @@ using TeamsVoiceWizard.Services;
 using Windows.Graphics;
 using Windows.Media.AppBroadcasting;
 using WinRT.Interop;
+
+using CommunityToolkit.WinUI.UI.Controls;
+using Microsoft.UI.Xaml.Data;
+
+
 
 namespace TeamsVoiceWizard;
 
@@ -35,6 +43,13 @@ public sealed partial class MainWindow : Window
     private bool _outFlushScheduled;
     private const int MaxTextChars = 250_000; // cap buffers to avoid runaway memory
 
+    // Phone management
+    private GraphPhoneService? _graphPhone;
+    private readonly ObservableCollection<PhoneNumberRecord> _phoneRecords = new();
+    private readonly PolicyCaches _policyCaches = new();
+
+
+
     public MainWindow()
     {
         InitializeComponent();
@@ -45,6 +60,8 @@ public sealed partial class MainWindow : Window
         RootGrid.Loaded += RootGrid_Loaded;
         Closed += MainWindow_Closed;
     }
+
+    
 
     private async void RootGrid_Loaded(object sender, RoutedEventArgs e)
     {
@@ -69,6 +86,8 @@ public sealed partial class MainWindow : Window
         AppendLog($"[Perf] Startup: PS init complete @ {sw.ElapsedMilliseconds}ms");
 
         UpdateGuardrails();
+
+        NumbersGrid.ItemsSource = _phoneRecords;
     }
 
     private void MainWindow_Closed(object sender, WindowEventArgs args)
@@ -294,6 +313,13 @@ public sealed partial class MainWindow : Window
         StatusPanel.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         BusyRing.IsActive = busy;
         StatusText.Text = message ?? string.Empty;
+    }
+
+    private void SetPhoneBusy(bool busy, string? message = null)
+    {
+        if (!_uiReady) return;
+        PhoneBusyRing.IsActive = busy;
+        PhoneStatusText.Text = message ?? string.Empty;
     }
 
     // -------------------------
@@ -596,5 +622,74 @@ public sealed partial class MainWindow : Window
             SetBusy(false);
             UpdateGuardrails();
         }
+    }
+
+    private async void BtnLoadNumbers_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_graphConnected)
+        {
+            AppendLog("Phone Management: Graph not connected.");
+            return;
+        }
+
+        // Lazily initialise the Graph phone service using the token from the PS runspace
+        _graphPhone ??= new GraphPhoneService(() => _ps!.GetGraphAccessTokenAsync());
+
+        BtnLoadNumbers.IsEnabled = false;
+        SetPhoneBusy(true, "Loading phone numbers...");
+        try
+        {
+            _phoneRecords.Clear();
+
+            var records = await _graphPhone.GetNumberAssignmentsAsync();
+
+            // Batch-resolve display names for all assigned numbers
+            var assignedIds = records
+                .Where(r => !string.IsNullOrWhiteSpace(r.AssignmentTargetId))
+                .Select(r => r.AssignmentTargetId!)
+                .Distinct()
+                .ToList();
+
+            SetPhoneBusy(true, $"Resolving {assignedIds.Count} user(s)...");
+            var resolved = assignedIds.Count > 0
+                ? await _graphPhone.ResolveUsersAsync(assignedIds)
+                : new Dictionary<string, (string DisplayName, string Upn)>();
+
+            foreach (var r in records)
+            {
+                if (r.AssignmentTargetId is not null &&
+                    resolved.TryGetValue(r.AssignmentTargetId, out var user))
+                {
+                    r.AssignedUserDisplayName = user.DisplayName;
+                    r.AssignedUserUpn = user.Upn;
+                }
+
+                _phoneRecords.Add(r);
+            }
+
+            AppendLog($"Phone Management: Loaded {_phoneRecords.Count} number(s).");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Phone Management: Load failed — {ex.Message}");
+        }
+        finally
+        {
+            BtnLoadNumbers.IsEnabled = true;
+            SetPhoneBusy(false);
+        }
+    }
+
+    private void NumbersGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var selected = NumbersGrid.SelectedItem as PhoneNumberRecord;
+        SidePanel.Visibility = selected is not null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void BtnApplyChanges_Click(object sender, RoutedEventArgs e)
+    {
+        // Implemented in Step 10
     }
 }
