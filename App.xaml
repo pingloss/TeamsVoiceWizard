@@ -6,12 +6,15 @@
     xmlns:local="using:TeamsVoiceWizard">
 
     <Application.Resources>
-        <controls:XamlControlsResources />
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <controls:XamlControlsResources />
+            </ResourceDictionary.MergedDictionaries>
 
-        <!-- Value Converters for Phone Management Tab -->
-        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-        <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
-
+            <!-- Value Converters for Phone Management Tab -->
+            <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
+        </ResourceDictionary>
     </Application.Resources>
 
 </Application>
