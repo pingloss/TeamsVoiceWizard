@@ -382,6 +382,62 @@ public sealed class PowerShellHost : IDisposable
             finally { _lock.Release(); }
         });
 
+    public Task<string> GetGraphAccessTokenAsync() =>
+    RunScalarAsync<string>("$global:_tvwGraphToken");
+
+    public Task<List<PolicyEntry>> GetDialPlansAsync() =>
+        Task.Run(async () =>
+        {
+            await _lock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var raw = RunRaw(@"
+                Get-CsTenantDialPlan |
+                    Select-Object -Property Identity, Description |
+                    ConvertTo-Json -Compress -AsArray
+            ");
+
+                var json = raw.FirstOrDefault()?.BaseObject?.ToString() ?? "[]";
+                var items = System.Text.Json.JsonSerializer.Deserialize<List<DialPlanDto>>(json,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? [];
+
+                return items
+                    .Select(d => new PolicyEntry(d.Identity ?? "", d.Identity ?? ""))
+                    .Where(e => !string.IsNullOrWhiteSpace(e.Id))
+                    .ToList();
+            }
+            finally { _lock.Release(); }
+        });
+
+    public Task<List<PolicyEntry>> GetVoiceRoutingPoliciesAsync() =>
+        Task.Run(async () =>
+        {
+            await _lock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var raw = RunRaw(@"
+                Get-CsOnlineVoiceRoutingPolicy |
+                    Select-Object -Property Identity, Description |
+                    ConvertTo-Json -Compress -AsArray
+            ");
+
+                var json = raw.FirstOrDefault()?.BaseObject?.ToString() ?? "[]";
+                var items = System.Text.Json.JsonSerializer.Deserialize<List<DialPlanDto>>(json,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? [];
+
+                return items
+                    .Select(d => new PolicyEntry(d.Identity ?? "", d.Identity ?? ""))
+                    .Where(e => !string.IsNullOrWhiteSpace(e.Id))
+                    .ToList();
+            }
+            finally { _lock.Release(); }
+        });
+
+    // Private DTO used only by the policy methods above
+    private record DialPlanDto(string? Identity, string? Description);
+
     private ICollection<PSObject> RunRaw(string script, bool throwOnError = true)
     {
         using var ps = PowerShell.Create();
@@ -479,6 +535,7 @@ function Invoke-TVWDeviceCodeLogin {
             } -SkipHttpErrorCheck -StatusCodeVariable status
 
         if ($status -eq 200 -and $resp.access_token) {
+            $global:_tvwGraphToken = $resp.access_token
             $secureToken = ConvertTo-SecureString $resp.access_token -AsPlainText -Force
             Connect-MgGraph -AccessToken $secureToken -NoWelcome
             return $true
