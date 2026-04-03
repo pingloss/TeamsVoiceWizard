@@ -674,16 +674,365 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    
+
+    // Add these event handlers and methods to MainWindow.xaml.cs
+    // Insert after the existing BtnLoadNumbers_Click and NumbersGrid_SelectionChanged methods
+
+    // ════════════════════════════════════════════════════════════════════════════════
+    // SIDE PANEL MANAGEMENT - Populate, populate, select handlers
+    // ════════════════════════════════════════════════════════════════════════════════
+
+    private PhoneNumberRecord? _currentlySelectedRecord;
+    private Dictionary<string, string> _usersCache = new();  // userId -> displayName cache
+    private bool _isLoadingUsers;
+
     private void NumbersGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         var selected = NumbersGrid.SelectedItem as PhoneNumberRecord;
-        SidePanel.Visibility = selected is not null
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+
+        if (selected is null)
+        {
+            SidePanel.Visibility = Visibility.Collapsed;
+            _currentlySelectedRecord = null;
+            return;
+        }
+
+        _currentlySelectedRecord = selected;
+        SidePanel.Visibility = Visibility.Visible;
+        PopulateSidePanel(selected);
     }
 
-    private void BtnApplyChanges_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Populates the side panel with the selected record's data.
+    /// Section A (Number Info) always shows.
+    /// Section B (User Assignment) always shows.
+    /// Section C (Policies) only shows when Direct Routing + assigned to user.
+    /// </summary>
+    private void PopulateSidePanel(PhoneNumberRecord record)
     {
-        // Implemented in Step 10
+        if (!_uiReady) return;
+
+        // ══ SECTION A: Number Info (always visible) ══
+        TxtPhoneNumber.Text = record.TelephoneNumber ?? "(unknown)";
+        TxtNumberType.Text = record.NumberType ?? "(unknown)";
+        TxtStatus.Text = record.AssignmentStatus ?? "(unknown)";
+        TxtCurrentUser.Text = record.AssignedUserDisplayName ?? "(unassigned)";
+
+        // ══ SECTION B: User Assignment ══
+        PopulateUserComboBox(record);
+
+        // ══ SECTION C: Policy Assignment Visibility ══
+        // Only show policy section when: Direct Routing AND assigned to a user
+        PolicyAssignmentSection.Visibility = record.CanAssignPolicies
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        // Pre-populate policy ComboBoxes if assigned
+        if (record.CanAssignPolicies)
+        {
+            PopulatePolicyComboBoxes(record);
+        }
+
+        // Reset the Apply button (no changes yet)
+        BtnApplySingleNumber.IsEnabled = false;
     }
+
+    /// <summary>
+    /// Populate the User ComboBox. Called on demand when user first clicks the dropdown.
+    /// </summary>
+    private async void PopulateUserComboBox(PhoneNumberRecord record)
+    {
+        // If already populated from cache, just use it
+        if (UserComboBox.Items?.Count > 0)
+        {
+            return;
+        }
+
+        // On first click, load the users list
+        // We'll wire this up in the ComboBox's event handler
+    }
+
+    /// <summary>
+    /// Called when the User ComboBox is opened (first time).
+    /// Fetches licensed users from Graph on demand.
+    /// </summary>
+    private async void UserComboBox_DropDownOpened(object sender, object e)
+    {
+        if (_isLoadingUsers || UserComboBox.Items?.Count > 0)
+        {
+            return;
+        }
+
+        _isLoadingUsers = true;
+        UserLoadingRing.IsActive = true;
+
+        try
+        {
+            // If users cache is empty, fetch from Graph
+            if (_usersCache.Count == 0)
+            {
+                var licensedUsers = await _graphPhone!.GetLicensedTeamsPhoneUsersAsync();
+
+                foreach (var (userId, displayName, upn) in licensedUsers)
+                {
+                    _usersCache[userId] = displayName;
+                    UserComboBox.Items?.Add(new ComboBoxItem { Content = displayName, Tag = upn });
+                }
+
+                AppendLog($"Phone Management: Loaded {_usersCache.Count} licensed Teams Phone user(s).");
+            }
+            else
+            {
+                // Already cached, just add to ComboBox if not there
+                foreach (var kvp in _usersCache)
+                {
+                    if (!UserComboBox.Items!.Cast<ComboBoxItem>().Any(i => i.Content?.ToString() == kvp.Value))
+                    {
+                        UserComboBox.Items!.Add(new ComboBoxItem { Content = kvp.Value, Tag = kvp.Key });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Phone Management: Failed to load users — {ex.Message}");
+        }
+        finally
+        {
+            UserLoadingRing.IsActive = false;
+            _isLoadingUsers = false;
+        }
+    }
+
+    private void UserComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_currentlySelectedRecord is null) return;
+
+        var selectedItem = UserComboBox.SelectedItem as ComboBoxItem;
+        if (selectedItem is null)
+        {
+            return;
+        }
+
+        var selectedUserUpn = selectedItem.Tag?.ToString();
+        _currentlySelectedRecord.PendingUserUpn = selectedUserUpn;
+
+        // Mark as dirty and enable the Apply button
+        UpdateApplyButtonState();
+    }
+
+    /// <summary>
+    /// Populate policy ComboBoxes from the cached PS-fetched policies.
+    /// </summary>
+    private void PopulatePolicyComboBoxes(PhoneNumberRecord record)
+    {
+        // Clear existing items
+        DialPlanComboBox.Items?.Clear();
+        VoiceRoutingPolicyComboBox.Items?.Clear();
+
+        // Add "(None / Keep Current)" option
+        DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
+        VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
+
+        // Add policies from cache
+        foreach (var policy in _policyCaches.DialPlans)
+        {
+            DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = policy.DisplayName, Tag = policy.Id });
+        }
+
+        foreach (var policy in _policyCaches.VoiceRoutingPolicies)
+        {
+            VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = policy.DisplayName, Tag = policy.Id });
+        }
+    }
+
+    private void DialPlanComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_currentlySelectedRecord is null) return;
+
+        var selectedItem = DialPlanComboBox.SelectedItem as ComboBoxItem;
+        _currentlySelectedRecord.PendingDialPlan = selectedItem?.Tag?.ToString();
+
+        UpdateApplyButtonState();
+    }
+
+    private void VoiceRoutingPolicyComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_currentlySelectedRecord is null) return;
+
+        var selectedItem = VoiceRoutingPolicyComboBox.SelectedItem as ComboBoxItem;
+        _currentlySelectedRecord.PendingVoiceRoutingPolicy = selectedItem?.Tag?.ToString();
+
+        UpdateApplyButtonState();
+    }
+
+    /// <summary>
+    /// Enable Apply button only when there are unsaved changes (IsDirty).
+    /// </summary>
+    private void UpdateApplyButtonState()
+    {
+        if (_currentlySelectedRecord is null)
+        {
+            BtnApplySingleNumber.IsEnabled = false;
+            return;
+        }
+
+        BtnApplySingleNumber.IsEnabled = _currentlySelectedRecord.IsDirty;
+    }
+
+    /// <summary>
+    /// Apply changes to the currently selected record via Graph API.
+    /// </summary>
+    private async void BtnApplySingleNumber_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentlySelectedRecord is null) return;
+
+        BtnApplySingleNumber.IsEnabled = false;
+        SetPhoneBusy(true, "Applying changes...");
+        SidePanelStatusText.Text = "";
+        SidePanelStatusText.Visibility = Visibility.Collapsed;
+
+        try
+        {
+            // 1. Assign/unassign number if user selection changed
+            if (_currentlySelectedRecord.PendingUserUpn != _currentlySelectedRecord.AssignedUserUpn)
+            {
+                SetPhoneBusy(true, $"Assigning number to user...");
+
+                if (string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingUserUpn))
+                {
+                    // Unassign
+                    await _graphPhone!.UnassignNumberAsync(_currentlySelectedRecord.TelephoneNumber);
+                    AppendLog($"Phone Management: Unassigned {_currentlySelectedRecord.TelephoneNumber}");
+                }
+                else
+                {
+                    // Assign
+                    await _graphPhone!.AssignNumberAsync(_currentlySelectedRecord.TelephoneNumber, _currentlySelectedRecord.PendingUserUpn);
+                    AppendLog($"Phone Management: Assigned {_currentlySelectedRecord.TelephoneNumber} to {_currentlySelectedRecord.PendingUserUpn}");
+                }
+
+                // Update the record's assigned state
+                _currentlySelectedRecord.AssignedUserUpn = _currentlySelectedRecord.PendingUserUpn;
+            }
+
+            // 2. Assign policies if Direct Routing + assigned
+            if (_currentlySelectedRecord.CanAssignPolicies)
+            {
+                if (!string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingDialPlan) ||
+                    !string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingVoiceRoutingPolicy))
+                {
+                    SetPhoneBusy(true, "Assigning policies...");
+
+                    await _graphPhone!.AssignPoliciesAsync(
+                        _currentlySelectedRecord.PendingUserUpn!,
+                        _currentlySelectedRecord.PendingDialPlan,
+                        _currentlySelectedRecord.PendingVoiceRoutingPolicy
+                    );
+
+                    AppendLog($"Phone Management: Assigned policies to {_currentlySelectedRecord.PendingUserUpn}");
+                }
+            }
+
+            // 3. Clear pending changes (commit them)
+            _currentlySelectedRecord.PendingUserUpn = _currentlySelectedRecord.AssignedUserUpn;
+            _currentlySelectedRecord.PendingDialPlan = null;
+            _currentlySelectedRecord.PendingVoiceRoutingPolicy = null;
+
+            SidePanelStatusText.Text = "✓ Changes applied successfully.";
+            SidePanelStatusText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Green);
+            SidePanelStatusText.Visibility = Visibility.Visible;
+
+            AppendLog($"Phone Management: Changes applied to {_currentlySelectedRecord.TelephoneNumber}");
+
+            // Re-populate the side panel to reflect new state
+            PopulateSidePanel(_currentlySelectedRecord);
+
+            // Enable "Apply Changes" toolbar button if any rows have pending changes
+            UpdateToolbarApplyButton();
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Phone Management: Apply failed — {ex.Message}");
+            SidePanelStatusText.Text = $"✗ Error: {ex.Message}";
+            SidePanelStatusText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
+            SidePanelStatusText.Visibility = Visibility.Visible;
+        }
+        finally
+        {
+            SetPhoneBusy(false);
+            BtnApplySingleNumber.IsEnabled = _currentlySelectedRecord?.IsDirty ?? false;
+        }
+    }
+
+    /// <summary>
+    /// Update toolbar "Apply Changes" button based on whether any records have pending changes.
+    /// </summary>
+    private void UpdateToolbarApplyButton()
+    {
+        BtnApplyChanges.IsEnabled = _phoneRecords.Any(r => r.IsDirty);
+    }
+
+    private async void BtnApplyChanges_Click(object sender, RoutedEventArgs e)
+    {
+        var dirtyRecords = _phoneRecords.Where(r => r.IsDirty).ToList();
+        if (dirtyRecords.Count == 0)
+        {
+            AppendLog("Phone Management: No pending changes to apply.");
+            return;
+        }
+
+        BtnApplyChanges.IsEnabled = false;
+        SetPhoneBusy(true, $"Applying changes to {dirtyRecords.Count} number(s)...");
+
+        try
+        {
+            foreach (var record in dirtyRecords)
+            {
+                // Apply same logic as single number (you could refactor this into a shared method)
+                if (record.PendingUserUpn != record.AssignedUserUpn)
+                {
+                    if (string.IsNullOrWhiteSpace(record.PendingUserUpn))
+                    {
+                        await _graphPhone!.UnassignNumberAsync(record.TelephoneNumber);
+                    }
+                    else
+                    {
+                        await _graphPhone!.AssignNumberAsync(record.TelephoneNumber, record.PendingUserUpn);
+                    }
+                    record.AssignedUserUpn = record.PendingUserUpn;
+                }
+
+                if (record.CanAssignPolicies &&
+                    (!string.IsNullOrWhiteSpace(record.PendingDialPlan) ||
+                     !string.IsNullOrWhiteSpace(record.PendingVoiceRoutingPolicy)))
+                {
+                    await _graphPhone!.AssignPoliciesAsync(
+                        record.PendingUserUpn!,
+                        record.PendingDialPlan,
+                        record.PendingVoiceRoutingPolicy
+                    );
+                }
+
+                record.PendingUserUpn = record.AssignedUserUpn;
+                record.PendingDialPlan = null;
+                record.PendingVoiceRoutingPolicy = null;
+            }
+
+            AppendLog($"Phone Management: Applied changes to {dirtyRecords.Count} number(s).");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Phone Management: Batch apply failed — {ex.Message}");
+        }
+        finally
+        {
+            SetPhoneBusy(false);
+            UpdateToolbarApplyButton();
+            NumbersGrid.ItemsSource = null;  // Force refresh
+            NumbersGrid.ItemsSource = _phoneRecords;
+        }
+    }
+    
 }
