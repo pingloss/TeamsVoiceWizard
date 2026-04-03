@@ -6,16 +6,16 @@ using Microsoft.UI.Xaml.Controls;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text;
+using Microsoft.UI.Xaml.Data;
 
 using TeamsVoiceWizard.Models;
 using TeamsVoiceWizard.Services;
 
 using Windows.Graphics;
-using Windows.Media.AppBroadcasting;
 using WinRT.Interop;
 
 using CommunityToolkit.WinUI.UI.Controls;
-using Microsoft.UI.Xaml.Data;
+
 
 
 
@@ -303,7 +303,8 @@ public sealed partial class MainWindow : Window
 
         BtnApplyVoice.IsEnabled = _psReady && _teamsConnected && domainsVerified;
 
-        PhoneTab.IsEnabled = _graphConnected;
+        if (PhoneTab is not null)
+            PhoneTab.IsEnabled = _graphConnected;
     }
 
     private void SetBusy(bool busy, string? message = null)
@@ -626,13 +627,8 @@ public sealed partial class MainWindow : Window
 
     private async void BtnLoadNumbers_Click(object sender, RoutedEventArgs e)
     {
-        if (!_graphConnected)
-        {
-            AppendLog("Phone Management: Graph not connected.");
-            return;
-        }
+        if (!_graphConnected) { AppendLog("Phone Management: Graph not connected."); return; }
 
-        // Lazily initialise the Graph phone service using the token from the PS runspace
         _graphPhone ??= new GraphPhoneService(() => _ps!.GetGraphAccessTokenAsync());
 
         BtnLoadNumbers.IsEnabled = false;
@@ -643,12 +639,10 @@ public sealed partial class MainWindow : Window
 
             var records = await _graphPhone.GetNumberAssignmentsAsync();
 
-            // Batch-resolve display names for all assigned numbers
             var assignedIds = records
                 .Where(r => !string.IsNullOrWhiteSpace(r.AssignmentTargetId))
                 .Select(r => r.AssignmentTargetId!)
-                .Distinct()
-                .ToList();
+                .Distinct().ToList();
 
             SetPhoneBusy(true, $"Resolving {assignedIds.Count} user(s)...");
             var resolved = assignedIds.Count > 0
@@ -663,10 +657,10 @@ public sealed partial class MainWindow : Window
                     r.AssignedUserDisplayName = user.DisplayName;
                     r.AssignedUserUpn = user.Upn;
                 }
-
                 _phoneRecords.Add(r);
             }
 
+            NumbersGrid.ItemsSource = _phoneRecords;
             AppendLog($"Phone Management: Loaded {_phoneRecords.Count} number(s).");
         }
         catch (Exception ex)

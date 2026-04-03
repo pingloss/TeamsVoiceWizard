@@ -9,9 +9,8 @@
              TabWidthMode="Equal"
              Margin="0">
 
-        <!-- ── Tab 1: Configuration (existing content, unchanged) ── -->
-        <TabViewItem Header="Configuration"
-                     IsClosable="False">
+        <!-- ── Tab 1: Configuration ── -->
+        <TabViewItem Header="Configuration" IsClosable="False">
             <Grid x:Name="RootGrid" Margin="12" RowSpacing="0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -161,19 +160,14 @@
                 <!-- ROW 1 — Output -->
                 <Border Grid.Row="1"
                         BorderBrush="{ThemeResource SystemControlForegroundBaseMediumBrush}"
-                        BorderThickness="1"
-                        Padding="6"
-                        Margin="0,0,0,6">
+                        BorderThickness="1" Padding="6" Margin="0,0,0,6">
                     <ScrollViewer x:Name="OutputScroll"
                                   HorizontalScrollBarVisibility="Auto"
                                   VerticalScrollBarVisibility="Auto">
                         <TextBox x:Name="OutputBox"
-                                 IsReadOnly="True"
-                                 AcceptsReturn="True"
-                                 TextWrapping="NoWrap"
-                                 FontFamily="Consolas"
-                                 FontSize="12"
-                                 Background="Transparent"
+                                 IsReadOnly="True" AcceptsReturn="True"
+                                 TextWrapping="NoWrap" FontFamily="Consolas"
+                                 FontSize="12" Background="Transparent"
                                  BorderThickness="0" />
                     </ScrollViewer>
                 </Border>
@@ -181,18 +175,14 @@
                 <!-- ROW 2 — Log -->
                 <Border Grid.Row="2"
                         BorderBrush="{ThemeResource SystemControlForegroundBaseMediumBrush}"
-                        BorderThickness="1"
-                        Padding="6">
+                        BorderThickness="1" Padding="6">
                     <ScrollViewer x:Name="LogScroll"
                                   HorizontalScrollBarVisibility="Disabled"
                                   VerticalScrollBarVisibility="Auto">
                         <TextBox x:Name="LogBox"
-                                 IsReadOnly="True"
-                                 AcceptsReturn="True"
-                                 TextWrapping="Wrap"
-                                 FontSize="11"
-                                 Background="Transparent"
-                                 BorderThickness="0" />
+                                 IsReadOnly="True" AcceptsReturn="True"
+                                 TextWrapping="Wrap" FontSize="11"
+                                 Background="Transparent" BorderThickness="0" />
                     </ScrollViewer>
                 </Border>
 
@@ -201,9 +191,9 @@
 
         <!-- ── Tab 2: Phone Management ── -->
         <TabViewItem x:Name="PhoneTab"
-             Header="Phone Management"
-             IsClosable="False"
-             IsEnabled="False">
+                     Header="Phone Management"
+                     IsClosable="False"
+                     IsEnabled="False">
             <Grid Margin="12">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -211,25 +201,22 @@
                 </Grid.RowDefinitions>
 
                 <!-- Toolbar -->
-                <StackPanel Grid.Row="0"
-                    Orientation="Horizontal"
-                    Spacing="8"
-                    Margin="0,0,0,8">
+                <StackPanel Grid.Row="0" Orientation="Horizontal"
+                            Spacing="8" Margin="0,0,0,8">
                     <Button x:Name="BtnLoadNumbers"
-                    Content="Load Numbers"
-                    Click="BtnLoadNumbers_Click" />
+                            Content="Load Numbers"
+                            Click="BtnLoadNumbers_Click" />
                     <Button x:Name="BtnApplyChanges"
-                    Content="Apply Changes"
-                    IsEnabled="False"
-                    Click="BtnApplyChanges_Click" />
+                            Content="Apply Changes"
+                            IsEnabled="False"
+                            Click="BtnApplyChanges_Click" />
                     <ProgressRing x:Name="PhoneBusyRing"
-                          IsActive="False"
-                          Width="18" Height="18"
-                          VerticalAlignment="Center" />
+                                  IsActive="False" Width="18" Height="18"
+                                  VerticalAlignment="Center" />
                     <TextBlock x:Name="PhoneStatusText"
-                       VerticalAlignment="Center"
-                       Style="{StaticResource CaptionTextBlockStyle}"
-                       Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" />
+                               VerticalAlignment="Center"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" />
                 </StackPanel>
 
                 <!-- DataGrid + Side Panel -->
@@ -241,30 +228,30 @@
 
                     <!-- DataGrid -->
                     <controls:DataGrid Grid.Column="0"
-                               x:Name="NumbersGrid"
-                               AutoGenerateColumns="False"
-                               SelectionMode="Single"
-                               CanUserSortColumns="True"
-                               IsReadOnly="True"
-                               GridLinesVisibility="Horizontal"
-                               SelectionChanged="NumbersGrid_SelectionChanged">
+                                       x:Name="NumbersGrid"
+                                       AutoGenerateColumns="False"
+                                       SelectionMode="Single"
+                                       CanUserSortColumns="True"
+                                       IsReadOnly="True"
+                                       GridLinesVisibility="Horizontal"
+                                       SelectionChanged="NumbersGrid_SelectionChanged">
                         <controls:DataGrid.Columns>
                             <controls:DataGridTextColumn Header="Phone Number"
-                                                 Binding="{Binding TelephoneNumber}"
-                                                 Width="160" />
+                                                         Binding="{Binding TelephoneNumber}"
+                                                         Width="160" />
                             <controls:DataGridTextColumn Header="Type"
-                                                 Binding="{Binding NumberType}"
-                                                 Width="140" />
+                                                         Binding="{Binding NumberType}"
+                                                         Width="140" />
                             <controls:DataGridTextColumn Header="Assigned To"
-                                                 Binding="{Binding AssignedUserDisplayName}"
-                                                 Width="220" />
+                                                         Binding="{Binding AssignedUserDisplayName}"
+                                                         Width="220" />
                             <controls:DataGridTextColumn Header="Status"
-                                                 Binding="{Binding AssignmentStatus}"
-                                                 Width="140" />
+                                                         Binding="{Binding AssignmentStatus}"
+                                                         Width="140" />
                         </controls:DataGrid.Columns>
                     </controls:DataGrid>
 
-                    <!-- Side Panel — placeholder border, content added in Step 6 -->
+                    <!-- Side Panel -->
                     <Border Grid.Column="1"
                             x:Name="SidePanel"
                             Visibility="Collapsed"
