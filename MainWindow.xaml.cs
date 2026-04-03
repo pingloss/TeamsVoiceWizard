@@ -283,6 +283,8 @@ public sealed partial class MainWindow : Window
             (_state.CreatedUsers.Count > 0 || _state.CreatedResourceAccounts.Count > 0);
 
         BtnApplyVoice.IsEnabled = _psReady && _teamsConnected && domainsVerified;
+
+        PhoneTab.IsEnabled = _graphConnected;
     }
 
     private void SetBusy(bool busy, string? message = null)
