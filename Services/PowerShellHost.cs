@@ -386,54 +386,66 @@ public sealed class PowerShellHost : IDisposable
     RunScalarAsync<string>("$global:_tvwGraphToken");
 
     public Task<List<PolicyEntry>> GetDialPlansAsync() =>
-        Task.Run(async () =>
+    Task.Run(async () =>
+    {
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            await _lock.WaitAsync().ConfigureAwait(false);
-            try
-            {
-                var raw = RunRaw(@"
+            var raw = RunRaw(@"
                 Get-CsTenantDialPlan |
                     Select-Object -Property Identity, Description |
                     ConvertTo-Json -Compress -AsArray
             ");
 
-                var json = raw.FirstOrDefault()?.BaseObject?.ToString() ?? "[]";
-                var items = System.Text.Json.JsonSerializer.Deserialize<List<DialPlanDto>>(json,
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                    ?? [];
+            var json = raw.FirstOrDefault()?.BaseObject?.ToString() ?? "[]";
+            var items = System.Text.Json.JsonSerializer.Deserialize<List<DialPlanDto>>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? [];
 
-                return items
-                    .Select(d => new PolicyEntry(d.Identity ?? "", d.Identity ?? ""))
-                    .Where(e => !string.IsNullOrWhiteSpace(e.Id))
-                    .ToList();
-            }
-            finally { _lock.Release(); }
-        });
+            return items
+                .Select(d =>
+                {
+                    var identity = d.Identity ?? "";
+                    // Extract display name: "Tag:Test-DP" → "Test-DP", "Global" → "Global"
+                    var displayName = identity.StartsWith("Tag:") ? identity.Substring(4) : identity;
+                    return new PolicyEntry(identity, displayName);
+                })
+                .Where(e => !string.IsNullOrWhiteSpace(e.Id))
+                .ToList();
+        }
+        finally { _lock.Release(); }
+    });
 
     public Task<List<PolicyEntry>> GetVoiceRoutingPoliciesAsync() =>
-        Task.Run(async () =>
+    Task.Run(async () =>
+    {
+        await _lock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            await _lock.WaitAsync().ConfigureAwait(false);
-            try
-            {
-                var raw = RunRaw(@"
+            var raw = RunRaw(@"
                 Get-CsOnlineVoiceRoutingPolicy |
                     Select-Object -Property Identity, Description |
                     ConvertTo-Json -Compress -AsArray
             ");
 
-                var json = raw.FirstOrDefault()?.BaseObject?.ToString() ?? "[]";
-                var items = System.Text.Json.JsonSerializer.Deserialize<List<DialPlanDto>>(json,
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                    ?? [];
+            var json = raw.FirstOrDefault()?.BaseObject?.ToString() ?? "[]";
+            var items = System.Text.Json.JsonSerializer.Deserialize<List<DialPlanDto>>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? [];
 
-                return items
-                    .Select(d => new PolicyEntry(d.Identity ?? "", d.Identity ?? ""))
-                    .Where(e => !string.IsNullOrWhiteSpace(e.Id))
-                    .ToList();
-            }
-            finally { _lock.Release(); }
-        });
+            return items
+                .Select(d =>
+                {
+                    var identity = d.Identity ?? "";
+                    // Extract display name: "Tag:GB-National-VP" → "GB-National-VP", "Global" → "Global"
+                    var displayName = identity.StartsWith("Tag:") ? identity.Substring(4) : identity;
+                    return new PolicyEntry(identity, displayName);
+                })
+                .Where(e => !string.IsNullOrWhiteSpace(e.Id))
+                .ToList();
+        }
+        finally { _lock.Release(); }
+    });
 
     // Private DTO used only by the policy methods above
     private record DialPlanDto(string? Identity, string? Description);

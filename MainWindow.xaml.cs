@@ -831,7 +831,7 @@ public sealed partial class MainWindow : Window
 
             foreach (var plan in dialPlans)
             {
-                DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = plan });
+                DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = plan.DisplayName, Tag = plan.Id });
             }
 
             AppendLog($"Phone Management: Loaded {dialPlans.Count} dial plan(s).");
@@ -869,7 +869,7 @@ public sealed partial class MainWindow : Window
 
             foreach (var policy in policies)
             {
-                VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = policy });
+                VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = policy.DisplayName, Tag = policy.Id });
             }
 
             AppendLog($"Phone Management: Loaded {policies.Count} voice routing policy(s).");
