@@ -2,11 +2,23 @@
     x:Class="TeamsVoiceWizard.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:Microsoft.UI.Xaml.Controls">
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:local="using:TeamsVoiceWizard">
 
     <Application.Resources>
         <!-- WinUI 3 / Fluent control styles -->
         <controls:XamlControlsResources />
+
+        <!-- ════════════════════════════════════════════════════════ -->
+        <!-- Value Converters for Phone Management Tab -->
+        <!-- ════════════════════════════════════════════════════════ -->
+
+        <!-- Convert bool to Visibility (true = Visible, false = Collapsed) -->
+        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+
+        <!-- Convert bool to Visibility inverted (true = Collapsed, false = Visible) -->
+        <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
+
     </Application.Resources>
 
 </Application>
