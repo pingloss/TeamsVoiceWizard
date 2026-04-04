@@ -790,7 +790,7 @@ public sealed partial class MainWindow : Window
             try
             {
                 var assignments = await _graphPhone!
-                    .GetUserPolicyAssignmentsAsync(record.AssignmentTargetId);
+                    .GetUserPolicyAssignmentsAsync(record.AssignmentTargetId, AppendLog);
 
                 assignments.TryGetValue("TenantDialPlan", out var dp);
                 assignments.TryGetValue("OnlineVoiceRoutingPolicy", out var vrp);

@@ -119,29 +119,42 @@ public sealed class GraphPhoneService
     /// Returns the current Teams policy assignments for a user, keyed by policy type.
     /// e.g. "TenantDialPlan" -> "Tag:London-DP", "OnlineVoiceRoutingPolicy" -> "Tag:GB-National"
     /// </summary>
-    public async Task<Dictionary<string, string>> GetUserPolicyAssignmentsAsync(string userId)
+    public async Task<Dictionary<string, string>> GetUserPolicyAssignmentsAsync(
+    string userId, Action<string>? log = null)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var url = $"https://graph.microsoft.com/v1.0/admin/teams/policy/userAssignments" +
-                  $"?$filter=userId eq '{userId}'&$select=policyType,policyId";
+                  $"?$filter=userId eq '{userId}'";
 
         try
         {
+            log?.Invoke($"[PolicyFetch] GET {url}");
+
             var page = await GetAsync<GraphListResponse<JsonElement>>(url).ConfigureAwait(false);
+
+            log?.Invoke($"[PolicyFetch] Response contained {page.Value.Count} item(s)");
 
             foreach (var item in page.Value)
             {
+                // Log the raw JSON of each item so we can see exact field names and values
+                log?.Invoke($"[PolicyFetch] Item: {item.GetRawText()}");
+
                 var policyType = item.TryGetProperty("policyType", out var pt) ? pt.GetString() : null;
                 var policyId = item.TryGetProperty("policyId", out var pi) ? pi.GetString() : null;
+
+                log?.Invoke($"[PolicyFetch] Parsed — policyType='{policyType}' policyId='{policyId}'");
 
                 if (!string.IsNullOrWhiteSpace(policyType) && !string.IsNullOrWhiteSpace(policyId))
                     result[policyType] = policyId;
             }
+
+            log?.Invoke($"[PolicyFetch] Final dictionary has {result.Count} entries: " +
+                        string.Join(", ", result.Select(kv => $"{kv.Key}={kv.Value}")));
         }
-        catch
+        catch (Exception ex)
         {
-            // Non-fatal — dropdowns just won't pre-select
+            log?.Invoke($"[PolicyFetch] EXCEPTION: {ex.Message}");
         }
 
         return result;
