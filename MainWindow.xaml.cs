@@ -16,9 +16,6 @@ using WinRT.Interop;
 
 using CommunityToolkit.WinUI.UI.Controls;
 
-
-
-
 namespace TeamsVoiceWizard;
 
 public sealed partial class MainWindow : Window
@@ -41,7 +38,7 @@ public sealed partial class MainWindow : Window
     private readonly StringBuilder _outBuffer = new();
     private bool _logFlushScheduled;
     private bool _outFlushScheduled;
-    private const int MaxTextChars = 250_000; // cap buffers to avoid runaway memory
+    private const int MaxTextChars = 250_000;
 
     // Phone management
     private GraphPhoneService? _graphPhone;
@@ -50,9 +47,12 @@ public sealed partial class MainWindow : Window
 
     private bool _isLoadingDialPlans = false;
     private bool _isLoadingVRPolicies = false;
+
+    // Keyed by Object ID → DisplayName
     private Dictionary<string, string> _usersCache = new();
 
-
+    private PhoneNumberRecord? _currentlySelectedRecord;
+    private bool _isLoadingUsers;
 
     public MainWindow()
     {
@@ -65,8 +65,6 @@ public sealed partial class MainWindow : Window
         Closed += MainWindow_Closed;
     }
 
-    
-
     private async void RootGrid_Loaded(object sender, RoutedEventArgs e)
     {
         if (_startupRan) return;
@@ -76,7 +74,6 @@ public sealed partial class MainWindow : Window
 
         TrySetInitialWindowSize(width: 1140, height: 880);
 
-        // Sync initial state
         _state.Country = (CountryBox?.Text ?? "GB").Trim().ToUpperInvariant();
         _state.DerivedTrunkModel = (ChkDerivedTrunk?.IsChecked == true);
 
@@ -109,12 +106,10 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            // WinUI Window sizing uses AppWindow APIs. [2](https://stackoverflow.com/questions/54563576/uwp-app-build-failure-microsoft-ui-xaml-markup-could-not-be-found)[3](https://www.thewindowsclub.com/process-exited-with-code-1)
             var hwnd = WindowNative.GetWindowHandle(this);
             var windowId = Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = AppWindow.GetFromWindowId(windowId);
-
-            appWindow.Resize(new SizeInt32(width, height)); //[2](https://stackoverflow.com/questions/54563576/uwp-app-build-failure-microsoft-ui-xaml-markup-could-not-be-found)
+            appWindow.Resize(new SizeInt32(width, height));
         }
         catch (Exception ex)
         {
@@ -138,19 +133,17 @@ public sealed partial class MainWindow : Window
 
             AppendLog("[Startup] Initialising PowerShell runspace...");
 
-            // Create host off the UI thread so the window appears instantly.
             _ps = await Task.Run(() =>
                 new PowerShellHost(modulePath, line =>
                 {
                     _dispatcher.TryEnqueue(() => AppendLog(line));
                 },
-                diagnostics: false // toggle true when debugging module issues
+                diagnostics: false
                 )
             );
 
             _psReady = true;
 
-            // Validate connections (async, non-blocking)
             _graphConnected = await _ps.IsGraphConnectedAsync();
             _teamsConnected = await _ps.IsTeamsConnectedAsync();
 
@@ -355,7 +348,7 @@ public sealed partial class MainWindow : Window
     }
 
     // -------------------------
-    // Button handlers
+    // Configuration tab button handlers
     // -------------------------
 
     private async void BtnConnectGraph_Click(object sender, RoutedEventArgs e)
@@ -367,7 +360,15 @@ public sealed partial class MainWindow : Window
         try
         {
             AppendLog("Graph: Starting device-code login...");
-            var scopes = new[] { "User.ReadWrite.All", "Domain.ReadWrite.All", "Organization.Read.All", "TeamsPolicyUserAssign.ReadWrite.All", "TeamsTelephoneNumber.ReadWrite.All", "TeamsUserConfiguration.Read.All" };
+            var scopes = new[]
+            {
+                "User.ReadWrite.All",
+                "Domain.ReadWrite.All",
+                "Organization.Read.All",
+                "TeamsPolicyUserAssign.ReadWrite.All",
+                "TeamsTelephoneNumber.ReadWrite.All",
+                "TeamsUserConfiguration.Read.All"
+            };
             await _ps!.ConnectGraphAsync(scopes);
 
             _graphConnected = await _ps.IsGraphConnectedAsync();
@@ -629,6 +630,10 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // ════════════════════════════════════════════════════════════════════════════════
+    // PHONE MANAGEMENT TAB
+    // ════════════════════════════════════════════════════════════════════════════════
+
     private async void BtnLoadNumbers_Click(object sender, RoutedEventArgs e)
     {
         if (!_graphConnected) { AppendLog("Phone Management: Graph not connected."); return; }
@@ -678,19 +683,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    
-
-    // Add these event handlers and methods to MainWindow.xaml.cs
-    // Insert after the existing BtnLoadNumbers_Click and NumbersGrid_SelectionChanged methods
-
-    // ════════════════════════════════════════════════════════════════════════════════
-    // SIDE PANEL MANAGEMENT - Populate, populate, select handlers
-    // ════════════════════════════════════════════════════════════════════════════════
-
-    private PhoneNumberRecord? _currentlySelectedRecord;
-    // private Dictionary<string, string> _usersCache = new();  // userId -> displayName cache
-    private bool _isLoadingUsers;
-
     private void NumbersGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         var selected = NumbersGrid.SelectedItem as PhoneNumberRecord;
@@ -707,11 +699,93 @@ public sealed partial class MainWindow : Window
         PopulateSidePanel(selected);
     }
 
+    // ── Side panel ───────────────────────────────────────────────────────────────
+
+    private void PopulateSidePanel(PhoneNumberRecord record)
+    {
+        if (!_uiReady) return;
+
+        TxtPhoneNumber.Text = record.TelephoneNumber ?? "(unknown)";
+        TxtNumberType.Text = record.NumberType ?? "(unknown)";
+        TxtStatus.Text = record.AssignmentStatus ?? "(unknown)";
+        TxtCurrentUser.Text = record.AssignedUserDisplayName ?? "(unassigned)";
+
+        // Eagerly load users and pre-select current one
+        _ = EnsureUsersLoadedAsync(record);
+
+        PolicyAssignmentSection.Visibility = record.CanAssignPolicies
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        if (record.CanAssignPolicies)
+        {
+            PopulatePolicyComboBoxes(record);
+            _ = EnsurePoliciesLoadedAsync(record);
+        }
+
+        BtnApplySingleNumber.IsEnabled = false;
+    }
+
+    /// <summary>
+    /// Loads all Teams Phone licensed users into the User ComboBox (once per session).
+    /// Tags each item with the user's Object ID for use in Graph API calls.
+    /// Pre-selects the current user based on AssignmentTargetId.
+    /// </summary>
+    private async Task EnsureUsersLoadedAsync(PhoneNumberRecord? record = null)
+    {
+        if (_usersCache.Count > 0)
+        {
+            // Already loaded — just pre-select if needed
+            if (record is not null && !string.IsNullOrWhiteSpace(record.AssignmentTargetId))
+                SelectComboBoxByTag(UserComboBox, record.AssignmentTargetId, UserComboBox_SelectionChanged);
+            return;
+        }
+
+        if (_isLoadingUsers) return;
+
+        _isLoadingUsers = true;
+        UserLoadingRing.IsActive = true;
+
+        try
+        {
+            var licensedUsers = await _graphPhone!.GetTeamsPhoneLicensedUsersAsync();
+
+            UserComboBox.SelectionChanged -= UserComboBox_SelectionChanged;
+            try
+            {
+                foreach (var (userId, upn, displayName) in licensedUsers)
+                {
+                    _usersCache[userId] = displayName;
+                    // ✅ Tag = Object ID (not UPN) — required for Graph API calls
+                    UserComboBox.Items?.Add(new ComboBoxItem { Content = displayName, Tag = userId });
+                }
+            }
+            finally
+            {
+                UserComboBox.SelectionChanged += UserComboBox_SelectionChanged;
+            }
+
+            AppendLog($"Phone Management: Loaded {_usersCache.Count} licensed Teams Phone user(s).");
+
+            // Pre-select by Object ID (AssignmentTargetId)
+            if (record is not null && !string.IsNullOrWhiteSpace(record.AssignmentTargetId))
+                SelectComboBoxByTag(UserComboBox, record.AssignmentTargetId, UserComboBox_SelectionChanged);
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Phone Management: Failed to load users — {ex.Message}");
+        }
+        finally
+        {
+            UserLoadingRing.IsActive = false;
+            _isLoadingUsers = false;
+        }
+    }
+
     private async Task EnsurePoliciesLoadedAsync(PhoneNumberRecord? record = null)
     {
         if (_policyCaches.DialPlans.Count > 0 && _policyCaches.VoiceRoutingPolicies.Count > 0)
         {
-            // Policies already cached — just pre-select if a record is provided
             if (record is not null)
                 await PreSelectCurrentValuesAsync(record);
             return;
@@ -759,7 +833,6 @@ public sealed partial class MainWindow : Window
                 AppendLog($"Phone Management: Loaded {vrPolicies.Count} voice routing policy(s).");
             }
 
-            // Pre-select current values now that ComboBoxes are populated
             if (record is not null)
                 await PreSelectCurrentValuesAsync(record);
         }
@@ -774,10 +847,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Fetches the user's current policy assignments from Graph (once per record)
-    /// and pre-selects the matching items in all three ComboBoxes.
-    /// </summary>
     private async Task PreSelectCurrentValuesAsync(PhoneNumberRecord record)
     {
         if (!record.CanAssignPolicies) return;
@@ -814,10 +883,25 @@ public sealed partial class MainWindow : Window
             VoiceRoutingPolicyComboBox_SelectionChanged);
     }
 
+    private void PopulatePolicyComboBoxes(PhoneNumberRecord record)
+    {
+        DialPlanComboBox.Items?.Clear();
+        VoiceRoutingPolicyComboBox.Items?.Clear();
+
+        DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
+        VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
+
+        foreach (var policy in _policyCaches.DialPlans)
+            DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = policy.DisplayName, Tag = policy.Id });
+
+        foreach (var policy in _policyCaches.VoiceRoutingPolicies)
+            VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = policy.DisplayName, Tag = policy.Id });
+    }
+
     /// <summary>
-    /// Selects the ComboBoxItem whose Tag matches the given value,
-    /// temporarily detaching the SelectionChanged handler to avoid
-    /// triggering dirty state during pre-selection.
+    /// Selects the ComboBoxItem whose Tag matches tagValue, detaching the handler
+    /// first so pre-selection doesn't trigger dirty state.
+    /// Strips the PowerShell "Tag:" prefix from item Tags before comparing.
     /// </summary>
     private void SelectComboBoxByTag(
         ComboBox comboBox,
@@ -829,13 +913,12 @@ public sealed partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(tagValue))
             {
-                comboBox.SelectedIndex = 0; // "(None - Keep Current)"
+                comboBox.SelectedIndex = 0;
                 return;
             }
 
             foreach (var item in comboBox.Items.Cast<ComboBoxItem>())
             {
-                // Normalise by stripping the PowerShell "Tag:" prefix if present
                 var itemTag = item.Tag?.ToString() ?? "";
                 if (itemTag.StartsWith("Tag:", StringComparison.OrdinalIgnoreCase))
                     itemTag = itemTag.Substring(4);
@@ -847,7 +930,7 @@ public sealed partial class MainWindow : Window
                 }
             }
 
-            comboBox.SelectedIndex = 0; // Fallback if no match found
+            comboBox.SelectedIndex = 0;
         }
         finally
         {
@@ -855,96 +938,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Populates the side panel with the selected record's data.
-    /// Section A (Number Info) always shows.
-    /// Section B (User Assignment) always shows.
-    /// Section C (Policies) only shows when Direct Routing + assigned to user.
-    /// </summary>
-    private void PopulateSidePanel(PhoneNumberRecord record)
-    {
-        if (!_uiReady) return;
+    // ── ComboBox event handlers ──────────────────────────────────────────────────
 
-        TxtPhoneNumber.Text = record.TelephoneNumber ?? "(unknown)";
-        TxtNumberType.Text = record.NumberType ?? "(unknown)";
-        TxtStatus.Text = record.AssignmentStatus ?? "(unknown)";
-        TxtCurrentUser.Text = record.AssignedUserDisplayName ?? "(unassigned)";
-
-        // ✅ Eagerly load users and pre-select current one (independent of policy load)
-        _ = EnsureUsersLoadedAsync(record);
-
-        PolicyAssignmentSection.Visibility = record.CanAssignPolicies
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-
-        if (record.CanAssignPolicies)
-        {
-            PopulatePolicyComboBoxes(record);
-            // ✅ Eagerly load policies and pre-select current ones
-            _ = EnsurePoliciesLoadedAsync(record);
-        }
-
-        BtnApplySingleNumber.IsEnabled = false;
-    }
-
-    /// <summary>
-    /// Populate the User ComboBox. Called on demand when user first clicks the dropdown.
-    /// </summary>
-    private async Task EnsureUsersLoadedAsync(PhoneNumberRecord? record = null)
-    {
-        // Already loaded — just pre-select if a record is provided
-        if (_usersCache.Count > 0)
-        {
-            if (record is not null && !string.IsNullOrWhiteSpace(record.AssignedUserUpn))
-                SelectComboBoxByTag(UserComboBox, record.AssignedUserUpn, UserComboBox_SelectionChanged);
-            return;
-        }
-
-        if (_isLoadingUsers) return;
-
-        _isLoadingUsers = true;
-        UserLoadingRing.IsActive = true;
-
-        try
-        {
-            var licensedUsers = await _graphPhone!.GetTeamsPhoneLicensedUsersAsync();
-
-            // Detach handler so adding items doesn't trigger dirty state
-            UserComboBox.SelectionChanged -= UserComboBox_SelectionChanged;
-            try
-            {
-                foreach (var (userId, upn, displayName) in licensedUsers)  // ✅ correct order
-                {
-                    _usersCache[userId] = displayName;
-                    UserComboBox.Items?.Add(new ComboBoxItem { Content = displayName, Tag = upn });
-                }
-            }
-            finally
-            {
-                UserComboBox.SelectionChanged += UserComboBox_SelectionChanged;
-            }
-
-            AppendLog($"Phone Management: Loaded {_usersCache.Count} licensed Teams Phone user(s).");
-
-            // Pre-select the current user now that items are populated
-            if (record is not null && !string.IsNullOrWhiteSpace(record.AssignedUserUpn))
-                SelectComboBoxByTag(UserComboBox, record.AssignedUserUpn, UserComboBox_SelectionChanged);
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"Phone Management: Failed to load users — {ex.Message}");
-        }
-        finally
-        {
-            UserLoadingRing.IsActive = false;
-            _isLoadingUsers = false;
-        }
-    }
-
-    /// <summary>
-    /// Called when the User ComboBox is opened (first time).
-    /// Fetches licensed users from Graph on demand.
-    /// </summary>
     private async void UserComboBox_DropDownOpened(object sender, object e)
     {
         if (_isLoadingUsers || _usersCache.Count > 0) return;
@@ -963,46 +958,20 @@ public sealed partial class MainWindow : Window
         await EnsurePoliciesLoadedAsync(_currentlySelectedRecord);
     }
 
+    /// <summary>
+    /// Tag holds Object ID — stored in PendingUserUpn which acts as PendingUserId
+    /// for the apply flow.
+    /// </summary>
     private void UserComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_currentlySelectedRecord is null) return;
 
         var selectedItem = UserComboBox.SelectedItem as ComboBoxItem;
-        if (selectedItem is null)
-        {
-            return;
-        }
+        if (selectedItem is null) return;
 
-        var selectedUserUpn = selectedItem.Tag?.ToString();
-        _currentlySelectedRecord.PendingUserUpn = selectedUserUpn;
-
-        // Mark as dirty and enable the Apply button
+        // Tag is Object ID
+        _currentlySelectedRecord.PendingUserUpn = selectedItem.Tag?.ToString();
         UpdateApplyButtonState();
-    }
-
-    /// <summary>
-    /// Populate policy ComboBoxes from the cached PS-fetched policies.
-    /// </summary>
-    private void PopulatePolicyComboBoxes(PhoneNumberRecord record)
-    {
-        // Clear existing items
-        DialPlanComboBox.Items?.Clear();
-        VoiceRoutingPolicyComboBox.Items?.Clear();
-
-        // Add "(None / Keep Current)" option
-        DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
-        VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
-
-        // Add policies from cache
-        foreach (var policy in _policyCaches.DialPlans)
-        {
-            DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = policy.DisplayName, Tag = policy.Id });
-        }
-
-        foreach (var policy in _policyCaches.VoiceRoutingPolicies)
-        {
-            VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = policy.DisplayName, Tag = policy.Id });
-        }
     }
 
     private void DialPlanComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1011,7 +980,6 @@ public sealed partial class MainWindow : Window
 
         var selectedItem = DialPlanComboBox.SelectedItem as ComboBoxItem;
         _currentlySelectedRecord.PendingDialPlan = selectedItem?.Tag?.ToString();
-
         UpdateApplyButtonState();
     }
 
@@ -1021,13 +989,9 @@ public sealed partial class MainWindow : Window
 
         var selectedItem = VoiceRoutingPolicyComboBox.SelectedItem as ComboBoxItem;
         _currentlySelectedRecord.PendingVoiceRoutingPolicy = selectedItem?.Tag?.ToString();
-
         UpdateApplyButtonState();
     }
 
-    /// <summary>
-    /// Enable Apply button only when there are unsaved changes (IsDirty).
-    /// </summary>
     private void UpdateApplyButtonState()
     {
         if (_currentlySelectedRecord is null)
@@ -1039,9 +1003,8 @@ public sealed partial class MainWindow : Window
         BtnApplySingleNumber.IsEnabled = _currentlySelectedRecord.IsDirty;
     }
 
-    /// <summary>
-    /// Apply changes to the currently selected record via Graph API.
-    /// </summary>
+    // ── Apply handlers ───────────────────────────────────────────────────────────
+
     private async void BtnApplySingleNumber_Click(object sender, RoutedEventArgs e)
     {
         if (_currentlySelectedRecord is null) return;
@@ -1053,68 +1016,78 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            // 1. Assign/unassign number if user selection changed
-            if (_currentlySelectedRecord.PendingUserUpn != _currentlySelectedRecord.AssignedUserUpn)
+            // Effective Object ID for policy calls — starts as the currently assigned user.
+            // Only changes if the user explicitly re-assigned the number.
+            var effectiveUserId = _currentlySelectedRecord.AssignmentTargetId;
+
+            // ── 1. Number assignment — only when user was explicitly changed ─────────
+            // PendingUserUpn holds Object ID (set by UserComboBox_SelectionChanged).
+            // Guard against null means the User ComboBox was never touched.
+            if (_currentlySelectedRecord.PendingUserUpn is not null &&
+                _currentlySelectedRecord.PendingUserUpn != _currentlySelectedRecord.AssignmentTargetId)
             {
-                SetPhoneBusy(true, $"Assigning number to user...");
+                SetPhoneBusy(true, "Assigning number to user...");
 
                 if (string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingUserUpn))
                 {
-                    // Unassign
                     await _graphPhone!.UnassignNumberAsync(_currentlySelectedRecord.TelephoneNumber);
                     AppendLog($"Phone Management: Unassigned {_currentlySelectedRecord.TelephoneNumber}");
+                    effectiveUserId = null;
                 }
                 else
                 {
-                    // Assign
-                    await _graphPhone!.AssignNumberAsync(_currentlySelectedRecord.TelephoneNumber, _currentlySelectedRecord.PendingUserUpn);
-                    AppendLog($"Phone Management: Assigned {_currentlySelectedRecord.TelephoneNumber} to {_currentlySelectedRecord.PendingUserUpn}");
-                }
+                    // PendingUserUpn is the Object ID
+                    await _graphPhone!.AssignNumberAsync(
+                        _currentlySelectedRecord.TelephoneNumber,
+                        _currentlySelectedRecord.PendingUserUpn);
 
-                // Update the record's assigned state
-                _currentlySelectedRecord.AssignedUserUpn = _currentlySelectedRecord.PendingUserUpn;
+                    AppendLog($"Phone Management: Assigned {_currentlySelectedRecord.TelephoneNumber} " +
+                              $"to user {_currentlySelectedRecord.PendingUserUpn}");
+
+                    effectiveUserId = _currentlySelectedRecord.PendingUserUpn;
+                }
             }
 
-            // 2. Assign policies if Direct Routing + assigned
-            if (_currentlySelectedRecord.CanAssignPolicies)
+            // ── 2. Policy assignment — uses Object ID ─────────────────────────────────
+            if (_currentlySelectedRecord.CanAssignPolicies &&
+                !string.IsNullOrWhiteSpace(effectiveUserId) &&
+                (!string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingDialPlan) ||
+                 !string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingVoiceRoutingPolicy)))
             {
-                if (!string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingDialPlan) ||
-                    !string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingVoiceRoutingPolicy))
-                {
-                    SetPhoneBusy(true, "Assigning policies...");
+                SetPhoneBusy(true, "Assigning policies...");
 
-                    await _graphPhone!.AssignPoliciesAsync(
-                        _currentlySelectedRecord.PendingUserUpn!,
-                        _currentlySelectedRecord.PendingDialPlan,
-                        _currentlySelectedRecord.PendingVoiceRoutingPolicy
-                    );
+                await _graphPhone!.AssignPoliciesAsync(
+                    effectiveUserId,                                        // ✅ Object ID
+                    _currentlySelectedRecord.PendingDialPlan,
+                    _currentlySelectedRecord.PendingVoiceRoutingPolicy);
 
-                    AppendLog($"Phone Management: Assigned policies to {_currentlySelectedRecord.PendingUserUpn}");
-                }
+                AppendLog($"Phone Management: Policies updated for {_currentlySelectedRecord.AssignedUserUpn}");
             }
 
-            // 3. Clear pending changes (commit them)
-            _currentlySelectedRecord.PendingUserUpn = _currentlySelectedRecord.AssignedUserUpn;
+            // ── 3. Commit ─────────────────────────────────────────────────────────────
+            _currentlySelectedRecord.PendingUserUpn = null;
             _currentlySelectedRecord.PendingDialPlan = null;
             _currentlySelectedRecord.PendingVoiceRoutingPolicy = null;
 
+            // Force re-fetch of policies next time this record is selected
+            _currentlySelectedRecord.PoliciesFetched = false;
+
             SidePanelStatusText.Text = "✓ Changes applied successfully.";
-            SidePanelStatusText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Green);
+            SidePanelStatusText.Foreground =
+                new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Green);
             SidePanelStatusText.Visibility = Visibility.Visible;
 
             AppendLog($"Phone Management: Changes applied to {_currentlySelectedRecord.TelephoneNumber}");
 
-            // Re-populate the side panel to reflect new state
             PopulateSidePanel(_currentlySelectedRecord);
-
-            // Enable "Apply Changes" toolbar button if any rows have pending changes
             UpdateToolbarApplyButton();
         }
         catch (Exception ex)
         {
             AppendLog($"Phone Management: Apply failed — {ex.Message}");
             SidePanelStatusText.Text = $"✗ Error: {ex.Message}";
-            SidePanelStatusText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
+            SidePanelStatusText.Foreground =
+                new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
             SidePanelStatusText.Visibility = Visibility.Visible;
         }
         finally
@@ -1124,9 +1097,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Update toolbar "Apply Changes" button based on whether any records have pending changes.
-    /// </summary>
     private void UpdateToolbarApplyButton()
     {
         BtnApplyChanges.IsEnabled = _phoneRecords.Any(r => r.IsDirty);
@@ -1148,34 +1118,42 @@ public sealed partial class MainWindow : Window
         {
             foreach (var record in dirtyRecords)
             {
-                // Apply same logic as single number (you could refactor this into a shared method)
-                if (record.PendingUserUpn != record.AssignedUserUpn)
+                var effectiveUserId = record.AssignmentTargetId;
+
+                // Number assignment — only when explicitly changed
+                if (record.PendingUserUpn is not null &&
+                    record.PendingUserUpn != record.AssignmentTargetId)
                 {
                     if (string.IsNullOrWhiteSpace(record.PendingUserUpn))
                     {
                         await _graphPhone!.UnassignNumberAsync(record.TelephoneNumber);
+                        effectiveUserId = null;
                     }
                     else
                     {
-                        await _graphPhone!.AssignNumberAsync(record.TelephoneNumber, record.PendingUserUpn);
+                        // PendingUserUpn holds Object ID
+                        await _graphPhone!.AssignNumberAsync(
+                            record.TelephoneNumber, record.PendingUserUpn);
+                        effectiveUserId = record.PendingUserUpn;
                     }
-                    record.AssignedUserUpn = record.PendingUserUpn;
                 }
 
+                // Policy assignment — uses Object ID
                 if (record.CanAssignPolicies &&
+                    !string.IsNullOrWhiteSpace(effectiveUserId) &&
                     (!string.IsNullOrWhiteSpace(record.PendingDialPlan) ||
                      !string.IsNullOrWhiteSpace(record.PendingVoiceRoutingPolicy)))
                 {
                     await _graphPhone!.AssignPoliciesAsync(
-                        record.PendingUserUpn!,
+                        effectiveUserId,
                         record.PendingDialPlan,
-                        record.PendingVoiceRoutingPolicy
-                    );
+                        record.PendingVoiceRoutingPolicy);
                 }
 
-                record.PendingUserUpn = record.AssignedUserUpn;
+                record.PendingUserUpn = null;
                 record.PendingDialPlan = null;
                 record.PendingVoiceRoutingPolicy = null;
+                record.PoliciesFetched = false;
             }
 
             AppendLog($"Phone Management: Applied changes to {dirtyRecords.Count} number(s).");
@@ -1188,9 +1166,8 @@ public sealed partial class MainWindow : Window
         {
             SetPhoneBusy(false);
             UpdateToolbarApplyButton();
-            NumbersGrid.ItemsSource = null;  // Force refresh
+            NumbersGrid.ItemsSource = null;
             NumbersGrid.ItemsSource = _phoneRecords;
         }
     }
-    
 }
