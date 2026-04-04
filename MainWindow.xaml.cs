@@ -835,8 +835,12 @@ public sealed partial class MainWindow : Window
 
             foreach (var item in comboBox.Items.Cast<ComboBoxItem>())
             {
-                if (string.Equals(item.Tag?.ToString(), tagValue,
-                    StringComparison.OrdinalIgnoreCase))
+                // Normalise by stripping the PowerShell "Tag:" prefix if present
+                var itemTag = item.Tag?.ToString() ?? "";
+                if (itemTag.StartsWith("Tag:", StringComparison.OrdinalIgnoreCase))
+                    itemTag = itemTag.Substring(4);
+
+                if (string.Equals(itemTag, tagValue, StringComparison.OrdinalIgnoreCase))
                 {
                     comboBox.SelectedItem = item;
                     return;
