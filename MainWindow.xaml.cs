@@ -780,25 +780,11 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private async Task PreSelectCurrentValuesAsync(PhoneNumberRecord record)
     {
-        // ── User ComboBox ──────────────────────────────────────────────────────────
-        if (!string.IsNullOrWhiteSpace(record.AssignedUserUpn) && UserComboBox.Items?.Count > 0)
-        {
-            foreach (var item in UserComboBox.Items.Cast<ComboBoxItem>())
-            {
-                if (string.Equals(item.Tag?.ToString(), record.AssignedUserUpn,
-                    StringComparison.OrdinalIgnoreCase))
-                {
-                    UserComboBox.SelectionChanged -= UserComboBox_SelectionChanged;
-                    UserComboBox.SelectedItem = item;
-                    UserComboBox.SelectionChanged += UserComboBox_SelectionChanged;
-                    break;
-                }
-            }
-        }
+        // User pre-selection is handled by EnsureUsersLoadedAsync — nothing to do here for users
 
         if (!record.CanAssignPolicies) return;
 
-        // ── Fetch current policies from Graph if not already done ──────────────────
+        // Fetch current policies from Graph if not already done
         if (!record.PoliciesFetched && !string.IsNullOrWhiteSpace(record.AssignmentTargetId))
         {
             try
@@ -816,16 +802,14 @@ public sealed partial class MainWindow : Window
             catch (Exception ex)
             {
                 AppendLog($"Phone Management: Could not fetch current policies — {ex.Message}");
-                record.PoliciesFetched = true; // Don't retry on failure
+                record.PoliciesFetched = true;
             }
         }
 
-        // ── Dial Plan ComboBox ─────────────────────────────────────────────────────
         SelectComboBoxByTag(DialPlanComboBox,
             record.CurrentDialPlan,
             DialPlanComboBox_SelectionChanged);
 
-        // ── Voice Routing Policy ComboBox ──────────────────────────────────────────
         SelectComboBoxByTag(VoiceRoutingPolicyComboBox,
             record.CurrentVoiceRoutingPolicy,
             VoiceRoutingPolicyComboBox_SelectionChanged);
@@ -878,87 +862,70 @@ public sealed partial class MainWindow : Window
     {
         if (!_uiReady) return;
 
-        // ══ SECTION A: Number Info (always visible) ══
         TxtPhoneNumber.Text = record.TelephoneNumber ?? "(unknown)";
         TxtNumberType.Text = record.NumberType ?? "(unknown)";
         TxtStatus.Text = record.AssignmentStatus ?? "(unknown)";
         TxtCurrentUser.Text = record.AssignedUserDisplayName ?? "(unassigned)";
 
-        // ══ SECTION B: User Assignment ══
-        PopulateUserComboBox(record);
+        // ✅ Eagerly load users and pre-select current one (independent of policy load)
+        _ = EnsureUsersLoadedAsync(record);
 
-        // ══ SECTION C: Policy Assignment Visibility ══
-        // Only show policy section when: Direct Routing AND assigned to a user
         PolicyAssignmentSection.Visibility = record.CanAssignPolicies
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        // Pre-populate policy ComboBoxes if assigned
         if (record.CanAssignPolicies)
         {
             PopulatePolicyComboBoxes(record);
+            // ✅ Eagerly load policies and pre-select current ones
             _ = EnsurePoliciesLoadedAsync(record);
         }
 
-        // Reset the Apply button (no changes yet)
         BtnApplySingleNumber.IsEnabled = false;
     }
 
     /// <summary>
     /// Populate the User ComboBox. Called on demand when user first clicks the dropdown.
     /// </summary>
-    private async void PopulateUserComboBox(PhoneNumberRecord record)
+    private async Task EnsureUsersLoadedAsync(PhoneNumberRecord? record = null)
     {
-        // If already populated from cache, just use it
-        if (UserComboBox.Items?.Count > 0)
+        // Already loaded — just pre-select if a record is provided
+        if (_usersCache.Count > 0)
         {
+            if (record is not null && !string.IsNullOrWhiteSpace(record.AssignedUserUpn))
+                SelectComboBoxByTag(UserComboBox, record.AssignedUserUpn, UserComboBox_SelectionChanged);
             return;
         }
 
-        // On first click, load the users list
-        // We'll wire this up in the ComboBox's event handler
-    }
-
-    /// <summary>
-    /// Called when the User ComboBox is opened (first time).
-    /// Fetches licensed users from Graph on demand.
-    /// </summary>
-    private async void UserComboBox_DropDownOpened(object sender, object e)
-    {
-        if (_isLoadingUsers || UserComboBox.Items?.Count > 0)
-        {
-            return;
-        }
+        if (_isLoadingUsers) return;
 
         _isLoadingUsers = true;
         UserLoadingRing.IsActive = true;
 
         try
         {
-            // If users cache is empty, fetch from Graph
-            if (_usersCache.Count == 0)
-            {
-                var licensedUsers = await _graphPhone!.GetTeamsPhoneLicensedUsersAsync();
+            var licensedUsers = await _graphPhone!.GetTeamsPhoneLicensedUsersAsync();
 
-                foreach (var (userId, displayName, upn) in licensedUsers)
+            // Detach handler so adding items doesn't trigger dirty state
+            UserComboBox.SelectionChanged -= UserComboBox_SelectionChanged;
+            try
+            {
+                foreach (var (userId, upn, displayName) in licensedUsers)  // ✅ correct order
                 {
                     _usersCache[userId] = displayName;
                     UserComboBox.Items?.Add(new ComboBoxItem { Content = displayName, Tag = upn });
                 }
-
-                AppendLog($"Phone Management: Loaded {_usersCache.Count} licensed Teams Phone user(s).");
             }
-            else
+            finally
             {
-                // Already cached, just add to ComboBox if not there
-                foreach (var kvp in _usersCache)
-                {
-                    if (!UserComboBox.Items!.Cast<ComboBoxItem>().Any(i => i.Content?.ToString() == kvp.Value))
-                    {
-                        UserComboBox.Items!.Add(new ComboBoxItem { Content = kvp.Value, Tag = kvp.Key });
-                    }
-                }
+                UserComboBox.SelectionChanged += UserComboBox_SelectionChanged;
             }
+
+            AppendLog($"Phone Management: Loaded {_usersCache.Count} licensed Teams Phone user(s).");
+
+            // Pre-select the current user now that items are populated
+            if (record is not null && !string.IsNullOrWhiteSpace(record.AssignedUserUpn))
+                SelectComboBoxByTag(UserComboBox, record.AssignedUserUpn, UserComboBox_SelectionChanged);
         }
         catch (Exception ex)
         {
@@ -969,6 +936,16 @@ public sealed partial class MainWindow : Window
             UserLoadingRing.IsActive = false;
             _isLoadingUsers = false;
         }
+    }
+
+    /// <summary>
+    /// Called when the User ComboBox is opened (first time).
+    /// Fetches licensed users from Graph on demand.
+    /// </summary>
+    private async void UserComboBox_DropDownOpened(object sender, object e)
+    {
+        if (_isLoadingUsers || _usersCache.Count > 0) return;
+        await EnsureUsersLoadedAsync(_currentlySelectedRecord);
     }
 
     private async void DialPlanComboBox_DropDownOpened(object sender, object e)
