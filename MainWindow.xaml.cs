@@ -367,7 +367,7 @@ public sealed partial class MainWindow : Window
         try
         {
             AppendLog("Graph: Starting device-code login...");
-            var scopes = new[] { "User.ReadWrite.All", "Domain.ReadWrite.All", "Organization.Read.All", "TeamsPolicyUserAssign.ReadWrite.All", "TeamsTelephoneNumber.ReadWrite.All" };
+            var scopes = new[] { "User.ReadWrite.All", "Domain.ReadWrite.All", "Organization.Read.All", "TeamsPolicyUserAssign.ReadWrite.All", "TeamsTelephoneNumber.ReadWrite.All", "TeamsUserConfiguration.Read.All" };
             await _ps!.ConnectGraphAsync(scopes);
 
             _graphConnected = await _ps.IsGraphConnectedAsync();
@@ -780,28 +780,27 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private async Task PreSelectCurrentValuesAsync(PhoneNumberRecord record)
     {
-        // User pre-selection is handled by EnsureUsersLoadedAsync — nothing to do here for users
-
         if (!record.CanAssignPolicies) return;
 
-        // Fetch current policies from Graph if not already done
         if (!record.PoliciesFetched && !string.IsNullOrWhiteSpace(record.AssignmentTargetId))
         {
             try
             {
-                var assignments = await _graphPhone!
-                    .GetUserPolicyAssignmentsAsync(record.AssignmentTargetId, AppendLog);
-
-                assignments.TryGetValue("TenantDialPlan", out var dp);
-                assignments.TryGetValue("OnlineVoiceRoutingPolicy", out var vrp);
+                var (dp, vrp) = await _graphPhone!
+                    .GetUserTeamsConfigurationAsync(record.AssignmentTargetId, AppendLog);
 
                 record.CurrentDialPlan = dp;
                 record.CurrentVoiceRoutingPolicy = vrp;
-                record.PoliciesFetched = true;
+
+                AppendLog($"[PolicyFetch] {record.AssignedUserUpn} — " +
+                          $"DialPlan='{dp ?? "none"}' VRP='{vrp ?? "none"}'");
             }
             catch (Exception ex)
             {
                 AppendLog($"Phone Management: Could not fetch current policies — {ex.Message}");
+            }
+            finally
+            {
                 record.PoliciesFetched = true;
             }
         }

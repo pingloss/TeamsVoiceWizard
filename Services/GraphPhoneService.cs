@@ -116,48 +116,72 @@ public sealed class GraphPhoneService
     }
 
     /// <summary>
-    /// Returns the current Teams policy assignments for a user, keyed by policy type.
-    /// e.g. "TenantDialPlan" -> "Tag:London-DP", "OnlineVoiceRoutingPolicy" -> "Tag:GB-National"
+    /// Returns the effective dial plan and voice routing policy for a user.
+    /// Uses GET /admin/teams/userConfigurations/{userId} which returns all
+    /// effective policy assignments including group-inherited ones.
+    /// Requires: TeamsUserConfiguration.Read.All scope
     /// </summary>
-    public async Task<Dictionary<string, string>> GetUserPolicyAssignmentsAsync(
-    string userId, Action<string>? log = null)
+    public async Task<(string? DialPlan, string? VoiceRoutingPolicy)>
+        GetUserTeamsConfigurationAsync(string userId, Action<string>? log = null)
     {
-        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        var url = $"https://graph.microsoft.com/v1.0/admin/teams/policy/userAssignments" +
-                  $"?$filter=userId eq '{userId}'";
+        string? dialPlan = null;
+        string? vrPolicy = null;
 
         try
         {
-            log?.Invoke($"[PolicyFetch] GET {url}");
+            var url = $"https://graph.microsoft.com/v1.0/admin/teams/userConfigurations/{userId}";
+            log?.Invoke($"[UserConfig] GET {url}");
 
-            var page = await GetAsync<GraphListResponse<JsonElement>>(url).ConfigureAwait(false);
+            using var req = await BuildRequestAsync(HttpMethod.Get, url).ConfigureAwait(false);
+            var resp = await _http.SendAsync(req).ConfigureAwait(false);
+            await EnsureSuccessAsync(resp).ConfigureAwait(false);
 
-            log?.Invoke($"[PolicyFetch] Response contained {page.Value.Count} item(s)");
+            var json = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            log?.Invoke($"[UserConfig] Response: {json}");
 
-            foreach (var item in page.Value)
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Navigate into value[] if present (some endpoints wrap in value array)
+            var entity = root.TryGetProperty("value", out var valArr) &&
+                         valArr.ValueKind == JsonValueKind.Array &&
+                         valArr.GetArrayLength() > 0
+                ? valArr[0]
+                : root;
+
+            if (!entity.TryGetProperty("effectivePolicyAssignments", out var assignments))
             {
-                // Log the raw JSON of each item so we can see exact field names and values
-                log?.Invoke($"[PolicyFetch] Item: {item.GetRawText()}");
-
-                var policyType = item.TryGetProperty("policyType", out var pt) ? pt.GetString() : null;
-                var policyId = item.TryGetProperty("policyId", out var pi) ? pi.GetString() : null;
-
-                log?.Invoke($"[PolicyFetch] Parsed — policyType='{policyType}' policyId='{policyId}'");
-
-                if (!string.IsNullOrWhiteSpace(policyType) && !string.IsNullOrWhiteSpace(policyId))
-                    result[policyType] = policyId;
+                log?.Invoke("[UserConfig] No effectivePolicyAssignments property found");
+                return (null, null);
             }
 
-            log?.Invoke($"[PolicyFetch] Final dictionary has {result.Count} entries: " +
-                        string.Join(", ", result.Select(kv => $"{kv.Key}={kv.Value}")));
+            foreach (var item in assignments.EnumerateArray())
+            {
+                var policyType = item.TryGetProperty("policyType", out var pt)
+                    ? pt.GetString() : null;
+
+                if (!item.TryGetProperty("policyAssignment", out var pa)) continue;
+
+                var displayName = pa.TryGetProperty("displayName", out var dn)
+                    ? dn.GetString() : null;
+
+                log?.Invoke($"[UserConfig] policyType='{policyType}' displayName='{displayName}'");
+
+                if (string.IsNullOrWhiteSpace(policyType) ||
+                    string.IsNullOrWhiteSpace(displayName)) continue;
+
+                if (policyType.Equals("TenantDialPlan", StringComparison.OrdinalIgnoreCase))
+                    dialPlan = displayName;
+                else if (policyType.Equals("OnlineVoiceRoutingPolicy", StringComparison.OrdinalIgnoreCase))
+                    vrPolicy = displayName;
+            }
         }
         catch (Exception ex)
         {
-            log?.Invoke($"[PolicyFetch] EXCEPTION: {ex.Message}");
+            log?.Invoke($"[UserConfig] EXCEPTION: {ex.Message}");
         }
 
-        return result;
+        return (dialPlan, vrPolicy);
     }
 
     // ── Public API ───────────────────────────────────────────────────��────────
