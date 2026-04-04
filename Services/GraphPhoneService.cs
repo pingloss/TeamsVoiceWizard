@@ -116,16 +116,16 @@ public sealed class GraphPhoneService
     }
 
     /// <summary>
-    /// Returns the effective dial plan and voice routing policy for a user.
-    /// Uses GET /admin/teams/userConfigurations/{userId} which returns all
-    /// effective policy assignments including group-inherited ones.
+    /// Returns all effective policy assignments for a user, keyed by policyType.
+    /// Value is (DisplayName, GraphPolicyId) — the GraphPolicyId is required for
+    /// the policy assign endpoint and differs from the PS Identity string.
     /// Requires: TeamsUserConfiguration.Read.All scope
     /// </summary>
-    public async Task<(string? DialPlan, string? VoiceRoutingPolicy)>
+    public async Task<Dictionary<string, (string DisplayName, string PolicyId)>>
         GetUserTeamsConfigurationAsync(string userId, Action<string>? log = null)
     {
-        string? dialPlan = null;
-        string? vrPolicy = null;
+        var result = new Dictionary<string, (string DisplayName, string PolicyId)>(
+            StringComparer.OrdinalIgnoreCase);
 
         try
         {
@@ -137,7 +137,6 @@ public sealed class GraphPhoneService
             await EnsureSuccessAsync(resp).ConfigureAwait(false);
 
             var json = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-            log?.Invoke($"[UserConfig] Response: {json}");
 
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
@@ -152,7 +151,7 @@ public sealed class GraphPhoneService
             if (!entity.TryGetProperty("effectivePolicyAssignments", out var assignments))
             {
                 log?.Invoke("[UserConfig] No effectivePolicyAssignments property found");
-                return (null, null);
+                return result;
             }
 
             foreach (var item in assignments.EnumerateArray())
@@ -164,16 +163,18 @@ public sealed class GraphPhoneService
 
                 var displayName = pa.TryGetProperty("displayName", out var dn)
                     ? dn.GetString() : null;
+                var policyId = pa.TryGetProperty("policyId", out var pi)
+                    ? pi.GetString() : null;
 
-                log?.Invoke($"[UserConfig] policyType='{policyType}' displayName='{displayName}'");
+                log?.Invoke($"[UserConfig] policyType='{policyType}' " +
+                            $"displayName='{displayName}' policyId='{policyId}'");
 
-                if (string.IsNullOrWhiteSpace(policyType) ||
-                    string.IsNullOrWhiteSpace(displayName)) continue;
-
-                if (policyType.Equals("TenantDialPlan", StringComparison.OrdinalIgnoreCase))
-                    dialPlan = displayName;
-                else if (policyType.Equals("OnlineVoiceRoutingPolicy", StringComparison.OrdinalIgnoreCase))
-                    vrPolicy = displayName;
+                if (!string.IsNullOrWhiteSpace(policyType) &&
+                    !string.IsNullOrWhiteSpace(displayName) &&
+                    !string.IsNullOrWhiteSpace(policyId))
+                {
+                    result[policyType] = (displayName, policyId);
+                }
             }
         }
         catch (Exception ex)
@@ -181,7 +182,7 @@ public sealed class GraphPhoneService
             log?.Invoke($"[UserConfig] EXCEPTION: {ex.Message}");
         }
 
-        return (dialPlan, vrPolicy);
+        return result;
     }
 
     // ── Public API ───────────────────────────────────────────────────��────────

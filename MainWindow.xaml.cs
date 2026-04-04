@@ -51,6 +51,10 @@ public sealed partial class MainWindow : Window
     // Keyed by Object ID → DisplayName
     private Dictionary<string, string> _usersCache = new();
 
+    // Maps "policyType:displayName" → Graph policyId
+    // e.g. "OnlineVoiceRoutingPolicy:MX-AllCalls" → "9_zJD8ALcwXLa5bs4BnJycjSEv7DFJMIMTG0NK-CZI4"
+    private readonly Dictionary<string, string> _graphPolicyIdCache = new();
+
     private PhoneNumberRecord? _currentlySelectedRecord;
     private bool _isLoadingUsers;
 
@@ -658,6 +662,26 @@ public sealed partial class MainWindow : Window
                 ? await _graphPhone.ResolveUsersAsync(assignedIds)
                 : new Dictionary<string, (string DisplayName, string Upn)>();
 
+            // Pre-warm the Graph policy ID cache by fetching configs for all assigned users
+            // concurrently. This ensures policyIds are ready before the user opens the side panel.
+            if (assignedIds.Count > 0)
+            {
+                SetPhoneBusy(true, "Building policy cache...");
+                var configTasks = assignedIds
+                    .Select(id => _graphPhone.GetUserTeamsConfigurationAsync(id, log: null))
+                    .ToList();
+
+                var configs = await Task.WhenAll(configTasks);
+
+                foreach (var config in configs)
+                {
+                    foreach (var (policyType, (displayName, policyId)) in config)
+                        _graphPolicyIdCache[$"{policyType}:{displayName}"] = policyId;
+                }
+
+                AppendLog($"Phone Management: Cached {_graphPolicyIdCache.Count} Graph policy ID(s).");
+            }
+
             foreach (var r in records)
             {
                 if (r.AssignmentTargetId is not null &&
@@ -855,14 +879,22 @@ public sealed partial class MainWindow : Window
         {
             try
             {
-                var (dp, vrp) = await _graphPhone!
+                var allPolicies = await _graphPhone!
                     .GetUserTeamsConfigurationAsync(record.AssignmentTargetId, AppendLog);
 
-                record.CurrentDialPlan = dp;
-                record.CurrentVoiceRoutingPolicy = vrp;
+                // Cache ALL policyIds from this user's config for use at apply time
+                foreach (var (policyType, (displayName, policyId)) in allPolicies)
+                    _graphPolicyIdCache[$"{policyType}:{displayName}"] = policyId;
+
+                // Extract the two we display in the side panel
+                record.CurrentDialPlan = allPolicies.TryGetValue("TenantDialPlan", out var dp)
+                    ? dp.DisplayName : null;
+                record.CurrentVoiceRoutingPolicy = allPolicies.TryGetValue("OnlineVoiceRoutingPolicy", out var vrp)
+                    ? vrp.DisplayName : null;
 
                 AppendLog($"[PolicyFetch] {record.AssignedUserUpn} — " +
-                          $"DialPlan='{dp ?? "none"}' VRP='{vrp ?? "none"}'");
+                          $"DialPlan='{record.CurrentDialPlan ?? "none"}' " +
+                          $"VRP='{record.CurrentVoiceRoutingPolicy ?? "none"}'");
             }
             catch (Exception ex)
             {
@@ -896,6 +928,29 @@ public sealed partial class MainWindow : Window
 
         foreach (var policy in _policyCaches.VoiceRoutingPolicies)
             VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = policy.DisplayName, Tag = policy.Id });
+    }
+
+    /// <summary>
+    /// Resolves a pending PS Identity string (e.g. "Tag:MX-AllCalls" or "Global")
+    /// to its Graph policyId using the cached values built during number load.
+    /// Returns null and logs a warning if the ID isn't cached.
+    /// </summary>
+    private string? ResolveGraphPolicyId(string policyType, string? psIdentity)
+    {
+        if (string.IsNullOrWhiteSpace(psIdentity)) return null;
+
+        // Strip the PowerShell "Tag:" prefix if present
+        var name = psIdentity.StartsWith("Tag:", StringComparison.OrdinalIgnoreCase)
+            ? psIdentity.Substring(4)
+            : psIdentity;
+
+        var key = $"{policyType}:{name}";
+        if (_graphPolicyIdCache.TryGetValue(key, out var graphId))
+            return graphId;
+
+        AppendLog($"Phone Management: Graph policy ID not cached for '{key}'. " +
+                  $"Click 'Load Numbers' to rebuild the cache.");
+        return null;
     }
 
     /// <summary>
@@ -1048,18 +1103,34 @@ public sealed partial class MainWindow : Window
                 }
             }
 
-            // ── 2. Policy assignment — uses Object ID ─────────────────────────────────
+            // ── 2. Policy assignment — resolve PS Identity → Graph policyId ──────────
             if (_currentlySelectedRecord.CanAssignPolicies &&
                 !string.IsNullOrWhiteSpace(effectiveUserId) &&
                 (!string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingDialPlan) ||
                  !string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingVoiceRoutingPolicy)))
             {
+                var dialPlanGraphId = ResolveGraphPolicyId(
+                    "TenantDialPlan", _currentlySelectedRecord.PendingDialPlan);
+                var vrpGraphId = ResolveGraphPolicyId(
+                    "OnlineVoiceRoutingPolicy", _currentlySelectedRecord.PendingVoiceRoutingPolicy);
+
+                bool dialRequested = !string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingDialPlan);
+                bool vrpRequested  = !string.IsNullOrWhiteSpace(_currentlySelectedRecord.PendingVoiceRoutingPolicy);
+
+                if ((dialRequested && dialPlanGraphId is null) ||
+                    (vrpRequested  && vrpGraphId is null))
+                {
+                    AppendLog("Phone Management: Could not apply — one or more Graph policy IDs " +
+                              "are not cached. Click 'Load Numbers' to rebuild the cache.");
+                    return;
+                }
+
                 SetPhoneBusy(true, "Assigning policies...");
 
                 await _graphPhone!.AssignPoliciesAsync(
-                    effectiveUserId,                                        // ✅ Object ID
-                    _currentlySelectedRecord.PendingDialPlan,
-                    _currentlySelectedRecord.PendingVoiceRoutingPolicy);
+                    effectiveUserId,
+                    dialPlanGraphId,
+                    vrpGraphId);
 
                 AppendLog($"Phone Management: Policies updated for {_currentlySelectedRecord.AssignedUserUpn}");
             }
@@ -1138,16 +1209,31 @@ public sealed partial class MainWindow : Window
                     }
                 }
 
-                // Policy assignment — uses Object ID
+                // Policy assignment — resolve PS Identity → Graph policyId
                 if (record.CanAssignPolicies &&
                     !string.IsNullOrWhiteSpace(effectiveUserId) &&
                     (!string.IsNullOrWhiteSpace(record.PendingDialPlan) ||
                      !string.IsNullOrWhiteSpace(record.PendingVoiceRoutingPolicy)))
                 {
-                    await _graphPhone!.AssignPoliciesAsync(
-                        effectiveUserId,
-                        record.PendingDialPlan,
-                        record.PendingVoiceRoutingPolicy);
+                    var dialPlanGraphId = ResolveGraphPolicyId("TenantDialPlan", record.PendingDialPlan);
+                    var vrpGraphId      = ResolveGraphPolicyId("OnlineVoiceRoutingPolicy", record.PendingVoiceRoutingPolicy);
+
+                    bool dialRequested = !string.IsNullOrWhiteSpace(record.PendingDialPlan);
+                    bool vrpRequested  = !string.IsNullOrWhiteSpace(record.PendingVoiceRoutingPolicy);
+
+                    if ((dialRequested && dialPlanGraphId is null) ||
+                        (vrpRequested  && vrpGraphId is null))
+                    {
+                        AppendLog($"Phone Management: Skipped policy assignment for " +
+                                  $"{record.TelephoneNumber} — Graph policy ID(s) not cached.");
+                    }
+                    else
+                    {
+                        await _graphPhone!.AssignPoliciesAsync(
+                            effectiveUserId,
+                            dialPlanGraphId,
+                            vrpGraphId);
+                    }
                 }
 
                 record.PendingUserUpn = null;
