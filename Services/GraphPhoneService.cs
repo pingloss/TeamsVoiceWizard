@@ -115,6 +115,38 @@ public sealed class GraphPhoneService
             $"Graph API error {(int)resp.StatusCode} {resp.ReasonPhrase}: {error}");
     }
 
+    /// <summary>
+    /// Returns the current Teams policy assignments for a user, keyed by policy type.
+    /// e.g. "TenantDialPlan" -> "Tag:London-DP", "OnlineVoiceRoutingPolicy" -> "Tag:GB-National"
+    /// </summary>
+    public async Task<Dictionary<string, string>> GetUserPolicyAssignmentsAsync(string userId)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var url = $"https://graph.microsoft.com/v1.0/admin/teams/policy/userAssignments" +
+                  $"?$filter=userId eq '{userId}'&$select=policyType,policyId";
+
+        try
+        {
+            var page = await GetAsync<GraphListResponse<JsonElement>>(url).ConfigureAwait(false);
+
+            foreach (var item in page.Value)
+            {
+                var policyType = item.TryGetProperty("policyType", out var pt) ? pt.GetString() : null;
+                var policyId = item.TryGetProperty("policyId", out var pi) ? pi.GetString() : null;
+
+                if (!string.IsNullOrWhiteSpace(policyType) && !string.IsNullOrWhiteSpace(policyId))
+                    result[policyType] = policyId;
+            }
+        }
+        catch
+        {
+            // Non-fatal — dropdowns just won't pre-select
+        }
+
+        return result;
+    }
+
     // ── Public API ───────────────────────────────────────────────────��────────
 
     /// <summary>

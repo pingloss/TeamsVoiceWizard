@@ -26,6 +26,11 @@ public class PhoneNumberRecord : INotifyPropertyChanged
     private string? _pendingDialPlan;
     private string? _pendingVoiceRoutingPolicy;
 
+    // Current policy assignments fetched from Graph — null means not yet fetched
+    public string? CurrentDialPlan { get; set; }
+    public string? CurrentVoiceRoutingPolicy { get; set; }
+    public bool PoliciesFetched { get; set; }
+
     public string? PendingUserUpn
     {
         get => _pendingUserUpn;

@@ -707,11 +707,15 @@ public sealed partial class MainWindow : Window
         PopulateSidePanel(selected);
     }
 
-    private async Task EnsurePoliciesLoadedAsync()
+    private async Task EnsurePoliciesLoadedAsync(PhoneNumberRecord? record = null)
     {
-        // Both already cached — nothing to do
         if (_policyCaches.DialPlans.Count > 0 && _policyCaches.VoiceRoutingPolicies.Count > 0)
+        {
+            // Policies already cached — just pre-select if a record is provided
+            if (record is not null)
+                await PreSelectCurrentValuesAsync(record);
             return;
+        }
 
         if (!EnsurePowerShellReady(logIfNotReady: false)) return;
 
@@ -720,7 +724,6 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            // Run both PS calls concurrently
             var dialTask = _policyCaches.DialPlans.Count == 0
                 ? _ps!.GetDialPlansAsync()
                 : Task.FromResult((List<PolicyEntry>)_policyCaches.DialPlans.ToList());
@@ -737,8 +740,6 @@ public sealed partial class MainWindow : Window
             if (dialPlans?.Count > 0)
             {
                 _policyCaches.DialPlans = dialPlans;
-
-                // Populate DialPlan ComboBox — clear placeholder then add all items
                 DialPlanComboBox.Items?.Clear();
                 DialPlanComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
                 foreach (var plan in dialPlans)
@@ -750,8 +751,6 @@ public sealed partial class MainWindow : Window
             if (vrPolicies?.Count > 0)
             {
                 _policyCaches.VoiceRoutingPolicies = vrPolicies;
-
-                // Populate VRP ComboBox — clear placeholder then add all items
                 VoiceRoutingPolicyComboBox.Items?.Clear();
                 VoiceRoutingPolicyComboBox.Items?.Add(new ComboBoxItem { Content = "(None - Keep Current)", Tag = null });
                 foreach (var policy in vrPolicies)
@@ -759,6 +758,10 @@ public sealed partial class MainWindow : Window
 
                 AppendLog($"Phone Management: Loaded {vrPolicies.Count} voice routing policy(s).");
             }
+
+            // Pre-select current values now that ComboBoxes are populated
+            if (record is not null)
+                await PreSelectCurrentValuesAsync(record);
         }
         catch (Exception ex)
         {
@@ -768,6 +771,100 @@ public sealed partial class MainWindow : Window
         {
             DialPlanLoadingRing.IsActive = false;
             VRPolicyLoadingRing.IsActive = false;
+        }
+    }
+
+    /// <summary>
+    /// Fetches the user's current policy assignments from Graph (once per record)
+    /// and pre-selects the matching items in all three ComboBoxes.
+    /// </summary>
+    private async Task PreSelectCurrentValuesAsync(PhoneNumberRecord record)
+    {
+        // ── User ComboBox ──────────────────────────────────────────────────────────
+        if (!string.IsNullOrWhiteSpace(record.AssignedUserUpn) && UserComboBox.Items?.Count > 0)
+        {
+            foreach (var item in UserComboBox.Items.Cast<ComboBoxItem>())
+            {
+                if (string.Equals(item.Tag?.ToString(), record.AssignedUserUpn,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    UserComboBox.SelectionChanged -= UserComboBox_SelectionChanged;
+                    UserComboBox.SelectedItem = item;
+                    UserComboBox.SelectionChanged += UserComboBox_SelectionChanged;
+                    break;
+                }
+            }
+        }
+
+        if (!record.CanAssignPolicies) return;
+
+        // ── Fetch current policies from Graph if not already done ──────────────────
+        if (!record.PoliciesFetched && !string.IsNullOrWhiteSpace(record.AssignmentTargetId))
+        {
+            try
+            {
+                var assignments = await _graphPhone!
+                    .GetUserPolicyAssignmentsAsync(record.AssignmentTargetId);
+
+                assignments.TryGetValue("TenantDialPlan", out var dp);
+                assignments.TryGetValue("OnlineVoiceRoutingPolicy", out var vrp);
+
+                record.CurrentDialPlan = dp;
+                record.CurrentVoiceRoutingPolicy = vrp;
+                record.PoliciesFetched = true;
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Phone Management: Could not fetch current policies — {ex.Message}");
+                record.PoliciesFetched = true; // Don't retry on failure
+            }
+        }
+
+        // ── Dial Plan ComboBox ─────────────────────────────────────────────────────
+        SelectComboBoxByTag(DialPlanComboBox,
+            record.CurrentDialPlan,
+            DialPlanComboBox_SelectionChanged);
+
+        // ── Voice Routing Policy ComboBox ──────────────────────────────────────────
+        SelectComboBoxByTag(VoiceRoutingPolicyComboBox,
+            record.CurrentVoiceRoutingPolicy,
+            VoiceRoutingPolicyComboBox_SelectionChanged);
+    }
+
+    /// <summary>
+    /// Selects the ComboBoxItem whose Tag matches the given value,
+    /// temporarily detaching the SelectionChanged handler to avoid
+    /// triggering dirty state during pre-selection.
+    /// </summary>
+    private void SelectComboBoxByTag(
+        ComboBox comboBox,
+        string? tagValue,
+        SelectionChangedEventHandler handler)
+    {
+        comboBox.SelectionChanged -= handler;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(tagValue))
+            {
+                comboBox.SelectedIndex = 0; // "(None - Keep Current)"
+                return;
+            }
+
+            foreach (var item in comboBox.Items.Cast<ComboBoxItem>())
+            {
+                if (string.Equals(item.Tag?.ToString(), tagValue,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    comboBox.SelectedItem = item;
+                    return;
+                }
+            }
+
+            comboBox.SelectedIndex = 0; // Fallback if no match found
+        }
+        finally
+        {
+            comboBox.SelectionChanged += handler;
         }
     }
 
@@ -800,7 +897,7 @@ public sealed partial class MainWindow : Window
         if (record.CanAssignPolicies)
         {
             PopulatePolicyComboBoxes(record);
-            _ = EnsurePoliciesLoadedAsync();
+            _ = EnsurePoliciesLoadedAsync(record);
         }
 
         // Reset the Apply button (no changes yet)
@@ -877,13 +974,13 @@ public sealed partial class MainWindow : Window
     private async void DialPlanComboBox_DropDownOpened(object sender, object e)
     {
         if (_isLoadingDialPlans || _policyCaches.DialPlans.Count > 0) return;
-        await EnsurePoliciesLoadedAsync();
+        await EnsurePoliciesLoadedAsync(_currentlySelectedRecord);
     }
 
     private async void VoiceRoutingPolicyComboBox_DropDownOpened(object sender, object e)
     {
         if (_isLoadingVRPolicies || _policyCaches.VoiceRoutingPolicies.Count > 0) return;
-        await EnsurePoliciesLoadedAsync();
+        await EnsurePoliciesLoadedAsync(_currentlySelectedRecord);
     }
 
     private void UserComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
