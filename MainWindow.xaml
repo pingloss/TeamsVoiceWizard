@@ -263,9 +263,29 @@
                             <StackPanel Spacing="16">
                                 <!-- === SECTION A: Number Info (Always visible when panel open) === -->
                                 <StackPanel Spacing="8">
-                                    <TextBlock Text="Phone Number Details"
-                           FontWeight="SemiBold"
-                           Style="{StaticResource BaseTextBlockStyle}" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0"
+                                                   Text="Phone Number Details"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"
+                                                   Style="{StaticResource BaseTextBlockStyle}" />
+                                        <Button x:Name="BtnCloseSidePanel"
+                                                Grid.Column="1"
+                                                AutomationProperties.Name="Close details panel"
+                                                ToolTipService.ToolTip="Close"
+                                                Click="BtnCloseSidePanel_Click"
+                                                Padding="8,4"
+                                                MinWidth="32"
+                                                Style="{StaticResource SubtleButtonStyle}">
+                                            <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                      Glyph="&#xE711;"
+                                                      FontSize="14" />
+                                        </Button>
+                                    </Grid>
 
                                     <Grid RowSpacing="6">
                                         <Grid.RowDefinitions>

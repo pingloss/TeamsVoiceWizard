@@ -723,6 +723,11 @@ public sealed partial class MainWindow : Window
         PopulateSidePanel(selected);
     }
 
+    private void BtnCloseSidePanel_Click(object sender, RoutedEventArgs e)
+    {
+        NumbersGrid.SelectedItem = null;
+    }
+
     // ── Side panel ───────────────────────────────────────────────────────────────
 
     private void PopulateSidePanel(PhoneNumberRecord record)
