@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI;
@@ -56,30 +55,54 @@ public partial class PhoneManagementViewModel : ObservableObject
 
     public event EventHandler? GridRefreshRequested;
 
-    [ObservableProperty] private PhoneNumberRecord? _selectedRecord;
+    [ObservableProperty]
+    public partial PhoneNumberRecord? SelectedRecord { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsLoadNumbersEnabled))]
-    private bool _isPhoneBusy;
-    [ObservableProperty] private string _phoneStatusMessage = "";
+    public partial bool IsPhoneBusy { get; set; }
 
-    [ObservableProperty] private string _detailPhoneNumber = "";
-    [ObservableProperty] private string _detailNumberType = "";
-    [ObservableProperty] private string _detailStatus = "";
-    [ObservableProperty] private string _detailCurrentUser = "";
+    [ObservableProperty]
+    public partial string PhoneStatusMessage { get; set; } = "";
 
-    [ObservableProperty] private bool _userLoadingRingActive;
-    [ObservableProperty] private bool _dialPlanLoadingRingActive;
-    [ObservableProperty] private bool _vrPolicyLoadingRingActive;
+    [ObservableProperty]
+    public partial string DetailPhoneNumber { get; set; } = "";
 
-    [ObservableProperty] private ComboPickItem? _selectedUserItem;
-    [ObservableProperty] private ComboPickItem? _selectedDialPlanItem;
-    [ObservableProperty] private ComboPickItem? _selectedVoiceRoutingItem;
+    [ObservableProperty]
+    public partial string DetailNumberType { get; set; } = "";
 
-    [ObservableProperty] private string _sidePanelStatusText = "";
-    [ObservableProperty] private bool _sidePanelStatusVisible;
-    [ObservableProperty] private Brush _sidePanelStatusBrush =
-        new SolidColorBrush(Colors.Gray);
+    [ObservableProperty]
+    public partial string DetailStatus { get; set; } = "";
+
+    [ObservableProperty]
+    public partial string DetailCurrentUser { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool UserLoadingRingActive { get; set; }
+
+    [ObservableProperty]
+    public partial bool DialPlanLoadingRingActive { get; set; }
+
+    [ObservableProperty]
+    public partial bool VRPolicyLoadingRingActive { get; set; }
+
+    [ObservableProperty]
+    public partial ComboPickItem? SelectedUserItem { get; set; }
+
+    [ObservableProperty]
+    public partial ComboPickItem? SelectedDialPlanItem { get; set; }
+
+    [ObservableProperty]
+    public partial ComboPickItem? SelectedVoiceRoutingItem { get; set; }
+
+    [ObservableProperty]
+    public partial string SidePanelStatusText { get; set; } = "";
+
+    [ObservableProperty]
+    public partial bool SidePanelStatusVisible { get; set; }
+
+    [ObservableProperty]
+    public partial Brush SidePanelStatusBrush { get; set; } = new SolidColorBrush(Colors.Gray);
 
     public bool IsSidePanelVisible => SelectedRecord is not null;
 
@@ -87,11 +110,11 @@ public partial class PhoneManagementViewModel : ObservableObject
 
     public bool IsLoadNumbersEnabled => !IsPhoneBusy;
 
-    partial void OnSelectedRecordChanged(PhoneNumberRecord? value)
+    partial void OnSelectedRecordChanged(PhoneNumberRecord? oldValue, PhoneNumberRecord? newValue)
     {
         if (_recordSubscribed is not null)
             _recordSubscribed.PropertyChanged -= OnSelectedRecordIsDirtyChanged;
-        _recordSubscribed = value;
+        _recordSubscribed = newValue;
         if (_recordSubscribed is not null)
             _recordSubscribed.PropertyChanged += OnSelectedRecordIsDirtyChanged;
 
@@ -100,10 +123,10 @@ public partial class PhoneManagementViewModel : ObservableObject
         SyncDetailFromRecord();
         ApplySingleChangeCommand.NotifyCanExecuteChanged();
 
-        if (value is null)
+        if (newValue is null)
             return;
 
-        _ = LoadSidePanelForRecordAsync(value);
+        _ = LoadSidePanelForRecordAsync(newValue);
     }
 
     private void OnSelectedRecordIsDirtyChanged(object? sender, PropertyChangedEventArgs e)
@@ -118,24 +141,24 @@ public partial class PhoneManagementViewModel : ObservableObject
             ApplyBatchChangesCommand.NotifyCanExecuteChanged();
     }
 
-    partial void OnSelectedUserItemChanged(ComboPickItem? value)
+    partial void OnSelectedUserItemChanged(ComboPickItem? oldValue, ComboPickItem? newValue)
     {
         if (_suppressUserCombo || SelectedRecord is null) return;
-        SelectedRecord.PendingUserUpn = value?.Value;
+        SelectedRecord.PendingUserUpn = newValue?.Value;
         ApplySingleChangeCommand.NotifyCanExecuteChanged();
     }
 
-    partial void OnSelectedDialPlanItemChanged(ComboPickItem? value)
+    partial void OnSelectedDialPlanItemChanged(ComboPickItem? oldValue, ComboPickItem? newValue)
     {
         if (_suppressPolicyCombo || SelectedRecord is null) return;
-        SelectedRecord.PendingDialPlan = value?.Value;
+        SelectedRecord.PendingDialPlan = newValue?.Value;
         ApplySingleChangeCommand.NotifyCanExecuteChanged();
     }
 
-    partial void OnSelectedVoiceRoutingItemChanged(ComboPickItem? value)
+    partial void OnSelectedVoiceRoutingItemChanged(ComboPickItem? oldValue, ComboPickItem? newValue)
     {
         if (_suppressPolicyCombo || SelectedRecord is null) return;
-        SelectedRecord.PendingVoiceRoutingPolicy = value?.Value;
+        SelectedRecord.PendingVoiceRoutingPolicy = newValue?.Value;
         ApplySingleChangeCommand.NotifyCanExecuteChanged();
     }
 
@@ -201,7 +224,7 @@ public partial class PhoneManagementViewModel : ObservableObject
 
             if (assignedIds.Count > 0)
             {
-                RunOnUi(() => { PhoneStatusMessage = "Building policy cache..." });
+                RunOnUi(() => { PhoneStatusMessage = "Building policy cache..."; });
 
                 var configTasks = assignedIds
                     .Select(id => graph.GetUserTeamsConfigurationAsync(id, log: null))
