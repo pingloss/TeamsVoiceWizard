@@ -17,6 +17,8 @@
     <DefaultLanguage>en-GB</DefaultLanguage>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <Platforms>AnyCPU;x64</Platforms>
+    <!-- Field-backed [ObservableProperty] is not WinRT AOT–friendly (MVVMTK0045); suppress until a LangVersion preview + partial-property migration. -->
+    <NoWarn>$(NoWarn);MVVMTK0045</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
