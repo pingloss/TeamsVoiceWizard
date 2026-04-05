@@ -247,7 +247,7 @@
                                                          Width="220" />
                             <controls:DataGridTextColumn Header="Status"
                                                          Binding="{Binding AssignmentStatus}"
-                                                         Width="140" />
+                                                         Width="200" />
                         </controls:DataGrid.Columns>
                     </controls:DataGrid>
 
