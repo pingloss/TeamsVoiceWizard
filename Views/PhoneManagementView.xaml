@@ -3,15 +3,15 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:CommunityToolkit.WinUI.UI.Controls"
              xmlns:vm="using:TeamsVoiceWizard.ViewModels"
-             xmlns:tw="using:TeamsVoiceWizard">
+             xmlns:tw="using:TeamsVoiceWizard"
+             x:DataType="vm:PhoneManagementViewModel">
 
     <UserControl.Resources>
         <tw:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
     </UserControl.Resources>
 
     <Grid x:Name="RootGrid"
-          Margin="12"
-          x:DataType="vm:PhoneManagementViewModel">
+          Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
