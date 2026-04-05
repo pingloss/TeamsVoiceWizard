@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI;
@@ -23,6 +24,7 @@ public partial class PhoneManagementViewModel : ObservableObject
 
     private bool _isLoadingUsers;
     private bool _isLoadingPolicies;
+    private readonly SemaphoreSlim _policyLoadLock = new(1, 1);
     private bool _suppressPolicyCombo;
     private bool _suppressUserCombo;
     private PhoneNumberRecord? _recordSubscribed;
@@ -191,6 +193,31 @@ public partial class PhoneManagementViewModel : ObservableObject
             _dispatcher.TryEnqueue(() => action());
     }
 
+    /// <summary>Awaitable UI marshal so combo population always finishes before subsequent async work (e.g. preselect).</summary>
+    private Task RunOnUiAsync(Action action)
+    {
+        if (_dispatcher.HasThreadAccess)
+        {
+            action();
+            return Task.CompletedTask;
+        }
+
+        var tcs = new TaskCompletionSource<bool>();
+        _dispatcher.TryEnqueue(() =>
+        {
+            try
+            {
+                action();
+                tcs.SetResult(true);
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+            }
+        });
+        return tcs.Task;
+    }
+
     [RelayCommand]
     private async Task LoadNumbersAsync()
     {
@@ -286,8 +313,8 @@ public partial class PhoneManagementViewModel : ObservableObject
 
             if (record.CanAssignPolicies)
             {
-                RunOnUi(() => PopulatePolicyComboBoxes(record));
-                await EnsurePoliciesLoadedAsync(record).ConfigureAwait(false);
+                await RunOnUiAsync(PopulatePolicyComboBoxes).ConfigureAwait(false);
+                await EnsurePoliciesLoadedIfNeededAsync().ConfigureAwait(false);
             }
 
             RunOnUi(() => ApplySingleChangeCommand.NotifyCanExecuteChanged());
@@ -304,11 +331,21 @@ public partial class PhoneManagementViewModel : ObservableObject
 
     public Task OnVoiceRoutingComboDropDownOpenedAsync() => EnsurePoliciesLoadedIfNeededAsync();
 
+    /// <summary>
+    /// Serializes policy loading (side panel + dropdown) so we never bail while another load is in flight,
+    /// and always routes through <see cref="EnsurePoliciesLoadedAsync"/> (populate combos + preselect).
+    /// </summary>
     private async Task EnsurePoliciesLoadedIfNeededAsync()
     {
-        if (_isLoadingPolicies || (_policyCaches.DialPlans.Count > 0 && _policyCaches.VoiceRoutingPolicies.Count > 0))
-            return;
-        await EnsurePoliciesLoadedAsync(SelectedRecord).ConfigureAwait(true);
+        await _policyLoadLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await EnsurePoliciesLoadedAsync(SelectedRecord).ConfigureAwait(false);
+        }
+        finally
+        {
+            _policyLoadLock.Release();
+        }
     }
 
     private async Task EnsureUsersLoadedAsync(PhoneNumberRecord? record = null)
@@ -360,12 +397,13 @@ public partial class PhoneManagementViewModel : ObservableObject
     {
         if (_policyCaches.DialPlans.Count > 0 && _policyCaches.VoiceRoutingPolicies.Count > 0)
         {
+            await RunOnUiAsync(PopulatePolicyComboBoxes).ConfigureAwait(false);
             if (record is not null)
-                await PreSelectCurrentValuesAsync(record).ConfigureAwait(true);
+                await PreSelectCurrentValuesAsync(record).ConfigureAwait(false);
             return;
         }
 
-        if (!_host.TryEnsurePowerShell(false))
+        if (!_host.TryEnsurePowerShell(true))
             return;
 
         _isLoadingPolicies = true;
@@ -404,8 +442,7 @@ public partial class PhoneManagementViewModel : ObservableObject
                     _host.Log($"Phone Management: Loaded {vrPolicies.Count} voice routing policy(s).");
                 }
 
-                if (record is not null && record.CanAssignPolicies)
-                    PopulatePolicyComboBoxes(record);
+                PopulatePolicyComboBoxes();
             });
 
             if (record is not null)
@@ -474,7 +511,7 @@ public partial class PhoneManagementViewModel : ObservableObject
         });
     }
 
-    private void PopulatePolicyComboBoxes(PhoneNumberRecord record)
+    private void PopulatePolicyComboBoxes()
     {
         DialPlanOptions.Clear();
         VoiceRoutingOptions.Clear();
