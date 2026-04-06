@@ -23,7 +23,7 @@ public partial class PhoneManagementViewModel : ObservableObject
     private readonly Dictionary<string, string> _usersCache = new();
 
     private bool _isLoadingUsers;
-    private bool _isLoadingPolicies;
+    //private bool _isLoadingPolicies;
     private readonly SemaphoreSlim _policyLoadLock = new(1, 1);
     private bool _suppressPolicyCombo;
     private bool _suppressUserCombo;
@@ -406,7 +406,7 @@ public partial class PhoneManagementViewModel : ObservableObject
         if (!_host.TryEnsurePowerShell(true))
             return;
 
-        _isLoadingPolicies = true;
+        //_isLoadingPolicies = true;
         RunOnUi(() =>
         {
             DialPlanLoadingRingActive = true;
@@ -454,7 +454,7 @@ public partial class PhoneManagementViewModel : ObservableObject
         }
         finally
         {
-            _isLoadingPolicies = false;
+            //_isLoadingPolicies = false;
             RunOnUi(() =>
             {
                 DialPlanLoadingRingActive = false;

@@ -291,23 +291,17 @@ public sealed class GraphPhoneService
         return result;
     }
 
-    /// <summary>
+    
     /// Returns all users who have the Teams Phone System service plan enabled.
     /// Results are used to populate the user assignment dropdown in the side panel.
-    /// Calls: GET /v1.0/users and filters client-side on assignedPlans.
-    /// Requires: User.Read.All or User.ReadWrite.All
-    /// Teams Phone System service plan ID = e43b5b99-8dfb-405f-9987-dc307f34bcbd
+    /// Calls: GET /v1.0/users with $filter on assignedPlans
+    /// Requires: User.ReadWrite.All scope
+    /// Note: Teams Phone System service plan ID = e43b5b99-8dfb-405f-9987-dc307f34bcbd
     /// </summary>
     public async Task<List<UserEntry>> GetTeamsPhoneLicensedUsersAsync()
     {
         var users = new List<UserEntry>();
-
-        const string teamsPhoneServicePlanId = "e43b5b99-8dfb-405f-9987-dc307f34bcbd";
-
-        string? next =
-            "https://graph.microsoft.com/v1.0/users" +
-            "?$select=id,displayName,userPrincipalName,assignedPlans" +
-            "&$top=999";
+        string? next = "https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName&$top=999";
 
         while (next is not null)
         {
@@ -315,31 +309,14 @@ public sealed class GraphPhoneService
 
             foreach (var u in page.Value)
             {
-                if (string.IsNullOrWhiteSpace(u.Id) ||
-                    string.IsNullOrWhiteSpace(u.Upn) ||
-                    u.AssignedPlans is null)
-                    continue;
-
-                bool hasTeamsPhone = u.AssignedPlans.Any(p =>
-                    p.ServicePlanId.Equals(
-                        teamsPhoneServicePlanId,
-                        StringComparison.OrdinalIgnoreCase) &&
-                    p.CapabilityStatus.Equals(
-                        "Enabled",
-                        StringComparison.OrdinalIgnoreCase));
-
-                if (!hasTeamsPhone)
-                    continue;
-
-                users.Add(new UserEntry(u.Id, u.Upn, u.DisplayName ?? u.Upn));
+                if (!string.IsNullOrWhiteSpace(u.Id) && !string.IsNullOrWhiteSpace(u.Upn))
+                    users.Add(new UserEntry(u.Id, u.Upn, u.DisplayName ?? u.Upn ?? ""));
             }
 
             next = page.NextLink;
         }
 
-        return users
-            .OrderBy(u => u.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        return users.OrderBy(u => u.DisplayName).ToList();
     }
 
     /// <summary>

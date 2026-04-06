@@ -353,7 +353,8 @@ public partial class ConfigurationViewModel : ObservableObject
             if (!GraphConnected) { AppendLog("Graph not connected. Connect Graph first."); return; }
 
             AppendLog("Loading licence SKUs...");
-            _skuChoices = await _host.LoadLicenseInventoryAsync(minFree: 2);
+            const int MinFreeSeatsRequired = 2;
+            _skuChoices = await _host.LoadLicenseInventoryAsync(MinFreeSeatsRequired);
 
             SkuItems.Clear();
             SelectedSkuIndex = -1;
