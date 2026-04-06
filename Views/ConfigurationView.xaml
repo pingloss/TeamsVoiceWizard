@@ -1,0 +1,181 @@
+<UserControl x:Class="TeamsVoiceWizard.Views.ConfigurationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:TeamsVoiceWizard">
+
+    <UserControl.Resources>
+        <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    </UserControl.Resources>
+
+    <Grid x:Name="RootGrid" Margin="12" RowSpacing="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="120" />
+            <RowDefinition Height="200" />
+        </Grid.RowDefinitions>
+
+        <!-- ROW 0 — Form + Workflow buttons -->
+        <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,10">
+
+            <TextBlock Text="PSTN Gateway(s) — Gamma shorthand or full FQDNs, comma-separated"
+                       Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBox x:Name="GammaBox"
+                     PlaceholderText="e.g. acme01  or  acme01.part03.ucconnect.co.uk, acme01.part13.ucconnect.co.uk"
+                     TextChanged="GammaBox_TextChanged" />
+
+            <CheckBox Content="Use derived trunk model (Gamma / Operator-managed)"
+                      IsChecked="{Binding DerivedTrunkModel, Mode=TwoWay}" />
+
+            <TextBlock Text="Site Name"
+                       Style="{StaticResource CaptionTextBlockStyle}" />
+            <TextBox x:Name="SiteBox"
+                     PlaceholderText="e.g. London-HQ"
+                     TextChanged="SiteBox_TextChanged" />
+
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="Country (ISO 3166-1 alpha-2)"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}" />
+                <TextBox x:Name="CountryBox"
+                         Text="GB"
+                         Width="90"
+                         MaxLength="2"
+                         TextChanged="CountryBox_TextChanged" />
+            </StackPanel>
+
+            <!-- Workflow steps grid -->
+            <Grid RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Step 1: Authentication -->
+                <TextBlock Grid.Row="0" Grid.Column="0"
+                           Text="1. Auth"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}" />
+                <StackPanel Grid.Row="0" Grid.Column="1"
+                            Orientation="Horizontal" Spacing="8">
+                    <Button Content="Connect Graph"
+                            Command="{Binding ConnectGraphCommand}"
+                            IsEnabled="{Binding IsConnectGraphEnabled}" />
+                    <Button Content="Connect Teams"
+                            Command="{Binding ConnectTeamsCommand}"
+                            IsEnabled="{Binding IsConnectTeamsEnabled}" />
+                </StackPanel>
+
+                <!-- Step 2: Domains -->
+                <TextBlock Grid.Row="1" Grid.Column="0"
+                           Text="2. Domains"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}" />
+                <StackPanel Grid.Row="1" Grid.Column="1"
+                            Orientation="Horizontal" Spacing="8">
+                    <Button Content="Create Domains + Get TXT"
+                            Command="{Binding CreateDomainsCommand}"
+                            IsEnabled="{Binding IsDomainsTxtEnabled}" />
+                    <Button Content="Verify Domains"
+                            Command="{Binding VerifyDomainsCommand}"
+                            IsEnabled="{Binding IsVerifyEnabled}" />
+                </StackPanel>
+
+                <!-- Step 3: Test objects -->
+                <TextBlock Grid.Row="2" Grid.Column="0"
+                           Text="3. Test Objects"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}" />
+                <Grid Grid.Row="2" Grid.Column="1" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0"
+                            Content="Load Licence SKUs"
+                            Command="{Binding LoadLicenceSkusCommand}"
+                            IsEnabled="{Binding IsLoadSkusEnabled}" />
+                    <ComboBox Grid.Column="1"
+                              HorizontalAlignment="Stretch"
+                              PlaceholderText="Select a SKU for test objects"
+                              ItemsSource="{Binding SkuItems}"
+                              SelectedIndex="{Binding SelectedSkuIndex, Mode=TwoWay}" />
+                    <Button Grid.Column="2"
+                            Content="Create Test Objects + Assign Licence"
+                            Command="{Binding CreateTestObjectsCommand}"
+                            IsEnabled="{Binding IsCreateTestObjsEnabled}" />
+                    <Button Grid.Column="3"
+                            Content="Cleanup Test Objects"
+                            Command="{Binding CleanupTestObjectsCommand}"
+                            IsEnabled="{Binding IsCleanupEnabled}" />
+                </Grid>
+
+                <!-- Step 4: Apply voice config -->
+                <TextBlock Grid.Row="3" Grid.Column="0"
+                           Text="4. Configure"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}" />
+                <Button Grid.Row="3" Grid.Column="1"
+                        Content="⚙ Apply Voice Configuration"
+                        Command="{Binding ApplyVoiceConfigurationCommand}"
+                        IsEnabled="{Binding IsApplyVoiceEnabled}" />
+            </Grid>
+
+            <!-- Status / busy indicator -->
+            <StackPanel Orientation="Horizontal" Spacing="8"
+                        Visibility="{Binding IsBusyVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                <ProgressRing IsActive="{Binding IsBusy}"
+                              Width="18" Height="18"
+                              VerticalAlignment="Center" />
+                <TextBlock Text="{Binding BusyMessage}"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" />
+            </StackPanel>
+
+        </StackPanel>
+
+        <!-- ROW 1 — Output -->
+        <Border Grid.Row="1"
+                BorderBrush="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                BorderThickness="1" Padding="6" Margin="0,0,0,6">
+            <ScrollViewer x:Name="OutputScroll"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto">
+                <TextBox IsReadOnly="True"
+                         AcceptsReturn="True"
+                         TextWrapping="NoWrap"
+                         FontFamily="Consolas"
+                         FontSize="12"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Text="{Binding OutputText, Mode=OneWay}" />
+            </ScrollViewer>
+        </Border>
+
+        <!-- ROW 2 — Log -->
+        <Border Grid.Row="2"
+                BorderBrush="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                BorderThickness="1" Padding="6">
+            <ScrollViewer x:Name="LogScroll"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <TextBox IsReadOnly="True"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         FontSize="11"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Text="{Binding LogText, Mode=OneWay}" />
+            </ScrollViewer>
+        </Border>
+
+    </Grid>
+</UserControl>
