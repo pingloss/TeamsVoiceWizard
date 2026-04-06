@@ -49,6 +49,16 @@ internal record GraphListResponse<T>(
     [property: JsonPropertyName("@odata.nextLink")] string? NextLink
 );
 
+// DTO for GET /v1.0/subscribedSkus?$select=servicePlans
+internal record GraphSubscribedSku(
+    [property: JsonPropertyName("servicePlans")] List<GraphServicePlan>? ServicePlans
+);
+
+internal record GraphServicePlan(
+    [property: JsonPropertyName("servicePlanName")] string? ServicePlanName,
+    [property: JsonPropertyName("servicePlanId")] string ServicePlanId
+);
+
 // ── Service ────────────────────────────────────────────────────────────────────
 
 /// <summary>
@@ -73,6 +83,41 @@ public sealed class GraphPhoneService
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    private Task<HashSet<string>>? _teamsPhonePlanIdsTask;
+
+    private Task<HashSet<string>> GetTeamsPhoneServicePlanIdsAsync()
+        => _teamsPhonePlanIdsTask ??= LoadTeamsPhoneServicePlanIdsAsync();
+
+    private async Task<HashSet<string>> LoadTeamsPhoneServicePlanIdsAsync()
+    {
+        // Service plan IDs for Teams Phone/Phone System are commonly under MCOEV*
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // subscribedSkus is usually not paged heavily, but we’ll still treat it like a list endpoint
+        var url = "https://graph.microsoft.com/v1.0/subscribedSkus?$select=servicePlans";
+        var page = await GetAsync<GraphListResponse<GraphSubscribedSku>>(url).ConfigureAwait(false);
+
+        foreach (var sku in page.Value)
+        {
+            if (sku.ServicePlans is null) continue;
+
+            foreach (var sp in sku.ServicePlans)
+            {
+                if (string.IsNullOrWhiteSpace(sp.ServicePlanId)) continue;
+
+                // Capture MCOEV and related variants (covers bundled + add-on realities)
+                if (!string.IsNullOrWhiteSpace(sp.ServicePlanName) &&
+                    sp.ServicePlanName.StartsWith("MCOEV", StringComparison.OrdinalIgnoreCase))
+                {
+                    ids.Add(sp.ServicePlanId);
+                }
+            }
+        }
+
+        return ids;
+    }
+
 
     /// <summary>
     /// Builds an authenticated HTTP request with the current access token.
@@ -291,17 +336,32 @@ public sealed class GraphPhoneService
         return result;
     }
 
-    
+
     /// Returns all users who have the Teams Phone System service plan enabled.
-    /// Results are used to populate the user assignment dropdown in the side panel.
-    /// Calls: GET /v1.0/users with $filter on assignedPlans
-    /// Requires: User.ReadWrite.All scope
-    /// Note: Teams Phone System service plan ID = e43b5b99-8dfb-405f-9987-dc307f34bcbd
+    /// 
     /// </summary>
     public async Task<List<UserEntry>> GetTeamsPhoneLicensedUsersAsync()
     {
         var users = new List<UserEntry>();
-        string? next = "https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName&$top=999";
+
+        HashSet<string> phonePlanIds;
+        try
+        {
+            phonePlanIds = await GetTeamsPhoneServicePlanIdsAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Fail-open to avoid an empty dropdown if subscribedSkus is blocked
+            phonePlanIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        // If we couldn’t resolve plan IDs, fall back to “all users” behaviour (no regression).
+        bool canFilter = phonePlanIds.Count > 0;
+
+        string? next =
+            "https://graph.microsoft.com/v1.0/users" +
+            "?$select=id,displayName,userPrincipalName,assignedPlans" +
+            "&$top=999";
 
         while (next is not null)
         {
@@ -309,14 +369,37 @@ public sealed class GraphPhoneService
 
             foreach (var u in page.Value)
             {
-                if (!string.IsNullOrWhiteSpace(u.Id) && !string.IsNullOrWhiteSpace(u.Upn))
-                    users.Add(new UserEntry(u.Id, u.Upn, u.DisplayName ?? u.Upn ?? ""));
+                if (string.IsNullOrWhiteSpace(u.Id) || string.IsNullOrWhiteSpace(u.Upn))
+                    continue;
+
+                if (canFilter)
+                {
+                    var plans = u.AssignedPlans;
+                    if (plans is null) continue;
+
+                    // capabilityStatus values are defined by Graph (Enabled/Warning/etc.). [1](https://learn.microsoft.com/en-us/graph/api/resources/assignedplan?view=graph-rest-1.0)
+                    bool hasTeamsPhone =
+                        plans.Any(p =>
+                            phonePlanIds.Contains(p.ServicePlanId) &&
+                            (p.CapabilityStatus.Equals("Enabled", StringComparison.OrdinalIgnoreCase) ||
+                             p.CapabilityStatus.Equals("Warning", StringComparison.OrdinalIgnoreCase)));
+
+                    if (!hasTeamsPhone)
+                        continue;
+                }
+
+                users.Add(new UserEntry(
+                    u.Id,
+                    u.Upn,
+                    u.DisplayName ?? u.Upn));
             }
 
             next = page.NextLink;
         }
 
-        return users.OrderBy(u => u.DisplayName).ToList();
+        return users
+            .OrderBy(u => u.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     /// <summary>

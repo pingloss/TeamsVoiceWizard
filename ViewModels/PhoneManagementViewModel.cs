@@ -376,7 +376,7 @@ public partial class PhoneManagementViewModel : ObservableObject
                     UserOptions.Add(new ComboPickItem(displayName, userId));
                 }
 
-                _host.Log($"Phone Management: Loaded {_usersCache.Count} licensed Teams Phone user(s).");
+                _host.Log($"Phone Management: User dropdown populated with {UserOptions.Count} Teams Phone–licensed user(s).");
 
                 if (record is not null && !string.IsNullOrWhiteSpace(record.AssignmentTargetId))
                     SelectUserByObjectId(record.AssignmentTargetId);
