@@ -2,7 +2,7 @@ using Microsoft.UI.Xaml;
 
 namespace TeamsVoiceWizard;
 
-public partial class App : Application
+    public partial class App : Application
 {
     private Window? _window;
 
@@ -16,4 +16,7 @@ public partial class App : Application
         _window = new MainWindow();
         _window.Activate();
     }
+
+    /// <summary>Returns the main window so dialogs can get its HWND for file pickers.</summary>
+    public Window GetMainWindow() => _window!;
 }

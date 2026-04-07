@@ -22,6 +22,8 @@
                     IsEnabled="{Binding IsLoadNumbersEnabled}" />
             <Button Content="Apply Changes"
                     Command="{Binding ApplyBatchChangesCommand}" />
+            <Button Content="Bulk Import…"
+                    Command="{Binding OpenBulkImportCommand}" />
             <ProgressRing IsActive="{Binding IsPhoneBusy}"
                           Width="18" Height="18"
                           VerticalAlignment="Center" />

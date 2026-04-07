@@ -460,4 +460,87 @@ public sealed class GraphPhoneService
             "https://graph.microsoft.com/v1.0/admin/teams/policy/userAssignments/assign",
             new { value = assignments });
     }
+
+    /// <summary>
+    /// Batch-resolves a set of UPNs to object ID, display name, and Teams Phone licence status.
+    /// Used by bulk import validation to check all users in a single set of Graph calls.
+    /// Key = UPN (case-insensitive).
+    /// </summary>
+    public async Task<Dictionary<string, BulkUserResult>> ResolveUsersByUpnBatchAsync(
+        IEnumerable<string> upns,
+        CancellationToken   ct = default)
+    {
+        var result  = new Dictionary<string, BulkUserResult>(StringComparer.OrdinalIgnoreCase);
+        var upnList = upns
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (upnList.Count == 0) return result;
+
+        var phonePlanIds = await GetTeamsPhoneServicePlanIdsAsync().ConfigureAwait(false);
+        var token        = await _getToken().ConfigureAwait(false);
+        const int batchSize = 20;
+
+        for (int i = 0; i < upnList.Count; i += batchSize)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var chunk = upnList.Skip(i).Take(batchSize).ToList();
+            var requests = chunk.Select((upn, idx) => new
+            {
+                id     = idx.ToString(),
+                method = "GET",
+                url    = $"/users/{Uri.EscapeDataString(upn)}?$select=id,displayName,userPrincipalName,assignedPlans"
+            });
+
+            var req = new HttpRequestMessage(HttpMethod.Post, "https://graph.microsoft.com/v1.0/$batch");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            req.Content = new StringContent(
+                JsonSerializer.Serialize(new { requests }),
+                Encoding.UTF8, "application/json");
+
+            var resp = await _http.SendAsync(req, ct).ConfigureAwait(false);
+            await EnsureSuccessAsync(resp).ConfigureAwait(false);
+
+            var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(json);
+
+            foreach (var response in doc.RootElement.GetProperty("responses").EnumerateArray())
+            {
+                if (response.GetProperty("status").GetInt32() != 200) continue;
+
+                var body        = response.GetProperty("body");
+                var objectId    = body.TryGetProperty("id",                out var idEl)  ? idEl.GetString()  ?? "" : "";
+                var displayName = body.TryGetProperty("displayName",       out var dnEl)  ? dnEl.GetString()  ?? "" : "";
+                var upn         = body.TryGetProperty("userPrincipalName", out var upnEl) ? upnEl.GetString() ?? "" : "";
+
+                if (string.IsNullOrWhiteSpace(objectId) || string.IsNullOrWhiteSpace(upn))
+                    continue;
+
+                bool hasLicence = false;
+                if (body.TryGetProperty("assignedPlans", out var plansEl) &&
+                    plansEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var plan in plansEl.EnumerateArray())
+                    {
+                        var spId      = plan.TryGetProperty("servicePlanId",    out var spEl) ? spEl.GetString() ?? "" : "";
+                        var capStatus = plan.TryGetProperty("capabilityStatus", out var csEl) ? csEl.GetString() ?? "" : "";
+
+                        if (phonePlanIds.Contains(spId) &&
+                            (capStatus.Equals("Enabled", StringComparison.OrdinalIgnoreCase) ||
+                             capStatus.Equals("Warning", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            hasLicence = true;
+                            break;
+                        }
+                    }
+                }
+
+                result[upn] = new BulkUserResult(objectId, displayName, hasLicence);
+            }
+        }
+
+        return result;
+    }
 }
