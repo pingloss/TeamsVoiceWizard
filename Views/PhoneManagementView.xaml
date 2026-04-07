@@ -38,8 +38,9 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-
+            
             <controls:DataGrid x:Name="NumbersGrid"
+                               Background="Transparent"
                                Grid.Column="0"
                                AutoGenerateColumns="False"
                                SelectionMode="Single"
@@ -60,7 +61,8 @@
                                                  Width="220" />
                     <controls:DataGridTextColumn Header="Status"
                                                  Binding="{Binding AssignmentStatus}"
-                                                 Width="200" />
+                                                 Width="*"
+                                                 MinWidth="200" />
                 </controls:DataGrid.Columns>
             </controls:DataGrid>
 
