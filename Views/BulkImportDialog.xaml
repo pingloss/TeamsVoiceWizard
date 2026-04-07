@@ -25,6 +25,7 @@
         <StackPanel Grid.Row="0" Spacing="8" Margin="0,0,0,12">
             <TextBlock Text="Select a CSV or XLSX file to import. Required columns: PhoneNumber, UserPrincipalName. For Direct Routing numbers, DialPlan and VoiceRoutingPolicy are also required."
                        TextWrapping="Wrap"
+                       HorizontalAlignment="Stretch"
                        Style="{StaticResource CaptionTextBlockStyle}"
                        Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}" />
 
@@ -76,6 +77,8 @@
                                CanUserSortColumns="False"
                                IsReadOnly="True"
                                GridLinesVisibility="Horizontal"
+                               HorizontalAlignment="Stretch"
+                               VerticalAlignment="Stretch"
                                ItemsSource="{Binding Rows}">
                 <controls:DataGrid.Columns>
                     <controls:DataGridTextColumn Header="Row"
@@ -104,13 +107,14 @@
         </Border>
 
         <TextBlock Grid.Row="2"
+                   x:Name="EmptyPlaceholder"
                    Text="No file loaded. Click 'Browse…' to select a CSV or XLSX file."
                    HorizontalAlignment="Center"
                    VerticalAlignment="Center"
+                   TextAlignment="Center"
                    Style="{StaticResource CaptionTextBlockStyle}"
                    Foreground="{ThemeResource SystemControlForegroundBaseMediumBrush}"
-                   Visibility="{Binding HasRows, Converter={StaticResource BoolToVisibility}}"
-                   x:Name="EmptyPlaceholder" />
+                   Visibility="Collapsed" />
 
         <!-- ── Row 3: Status summary ── -->
         <TextBlock Grid.Row="3"
