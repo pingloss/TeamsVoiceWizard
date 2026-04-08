@@ -3,6 +3,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using TeamsVoiceWizard.Services;
 using TeamsVoiceWizard.ViewModels;
 using Windows.Graphics;
@@ -95,7 +96,7 @@ public sealed partial class MainWindow : Window
     private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
         try { _ps?.Dispose(); }
-        catch { /* ignore */ }
+        catch (Exception ex) { Debug.WriteLine($"PowerShell cleanup failed: {ex}"); }
         finally
         {
             _ps      = null;
@@ -103,6 +104,14 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+    /// <summary>
+    /// Sets the initial window size in device-independent units (DIPs).
+    /// AppWindow.Resize takes physical pixels, so we scale by the window's DPI to
+    /// keep the window the same effective size on Hi-DPI displays.
+    /// </summary>
     private void TrySetInitialWindowSize(int width, int height)
     {
         try
@@ -110,7 +119,21 @@ public sealed partial class MainWindow : Window
             var hwnd      = WindowNative.GetWindowHandle(this);
             var windowId  = Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = AppWindow.GetFromWindowId(windowId);
-            appWindow.Resize(new SizeInt32(width, height));
+
+            double scale = 1.0;
+            try
+            {
+                var dpi = GetDpiForWindow(hwnd);
+                if (dpi > 0) scale = dpi / 96.0;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"GetDpiForWindow failed, defaulting to 1.0: {ex}");
+            }
+
+            appWindow.Resize(new SizeInt32(
+                (int)Math.Round(width  * scale),
+                (int)Math.Round(height * scale)));
         }
         catch (Exception ex)
         {

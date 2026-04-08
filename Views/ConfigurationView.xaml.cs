@@ -53,13 +53,13 @@ public sealed partial class ConfigurationView : UserControl
     private void OnLogScrollRequested(object? sender, EventArgs e)
     {
         try { LogScroll?.ChangeView(null, double.MaxValue, null); }
-        catch { /* ignore */ }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"LogScroll ChangeView failed: {ex}"); }
     }
 
     private void OnOutputScrollRequested(object? sender, EventArgs e)
     {
         try { OutputScroll?.ChangeView(null, double.MaxValue, null); }
-        catch { /* ignore */ }
+        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"OutputScroll ChangeView failed: {ex}"); }
     }
 
     // ── TextBox relay handlers ────────────────────────────────────────────────

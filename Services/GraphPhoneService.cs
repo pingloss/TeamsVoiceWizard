@@ -69,7 +69,10 @@ internal record GraphServicePlan(
 public sealed class GraphPhoneService
 {
     private readonly Func<Task<string>> _getToken;
-    private readonly HttpClient _http;
+
+    // Shared across all GraphPhoneService instances to enable connection pooling
+    // and avoid socket exhaustion (HttpClient anti-pattern).
+    private static readonly HttpClient _http = new();
 
     private static readonly JsonSerializerOptions _jsonOpts = new()
     {
@@ -79,7 +82,6 @@ public sealed class GraphPhoneService
     public GraphPhoneService(Func<Task<string>> getToken)
     {
         _getToken = getToken;
-        _http = new HttpClient();
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
@@ -252,23 +254,32 @@ public sealed class GraphPhoneService
         var records = new List<PhoneNumberRecord>();
         string? next = "https://graph.microsoft.com/v1.0/admin/teams/telephoneNumberManagement/numberAssignments";
 
-        while (next is not null)
+        try
         {
-            var page = await GetAsync<GraphListResponse<GraphNumberAssignment>>(next)
-                .ConfigureAwait(false);
-
-            foreach (var item in page.Value)
+            while (next is not null)
             {
-                records.Add(new PhoneNumberRecord
-                {
-                    TelephoneNumber = item.TelephoneNumber,
-                    NumberType = item.NumberType,
-                    AssignmentStatus = item.AssignmentStatus,
-                    AssignmentTargetId = item.AssignmentTargetId
-                });
-            }
+                var page = await GetAsync<GraphListResponse<GraphNumberAssignment>>(next)
+                    .ConfigureAwait(false);
 
-            next = page.NextLink;
+                foreach (var item in page.Value)
+                {
+                    records.Add(new PhoneNumberRecord
+                    {
+                        TelephoneNumber = item.TelephoneNumber,
+                        NumberType = item.NumberType,
+                        AssignmentStatus = item.AssignmentStatus,
+                        AssignmentTargetId = item.AssignmentTargetId
+                    });
+                }
+
+                next = page.NextLink;
+            }
+        }
+        catch (Exception ex)
+        {
+            // Surface paging failures rather than returning a partial list silently.
+            throw new InvalidOperationException(
+                $"Failed to fetch number assignments after {records.Count} records.", ex);
         }
 
         return records;
