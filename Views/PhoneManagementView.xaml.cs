@@ -1,6 +1,5 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Data;
 using TeamsVoiceWizard.ViewModels;
 
 namespace TeamsVoiceWizard.Views;
@@ -13,7 +12,7 @@ public sealed partial class PhoneManagementView : UserControl
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
-        Unloaded += OnUnloaded;
+        Unloaded           += OnUnloaded;
     }
 
     private void OnDataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
@@ -21,6 +20,7 @@ public sealed partial class PhoneManagementView : UserControl
         if (_boundVm is not null)
         {
             _boundVm.GridRefreshRequested -= OnGridRefreshRequested;
+            _boundVm.BulkImportRequested  -= OnBulkImportRequested;
             _boundVm = null;
         }
 
@@ -28,6 +28,7 @@ public sealed partial class PhoneManagementView : UserControl
         {
             _boundVm = vm;
             vm.GridRefreshRequested += OnGridRefreshRequested;
+            vm.BulkImportRequested  += OnBulkImportRequested;
         }
     }
 
@@ -36,6 +37,7 @@ public sealed partial class PhoneManagementView : UserControl
         if (_boundVm is not null)
         {
             _boundVm.GridRefreshRequested -= OnGridRefreshRequested;
+            _boundVm.BulkImportRequested  -= OnBulkImportRequested;
             _boundVm = null;
         }
     }
@@ -46,6 +48,32 @@ public sealed partial class PhoneManagementView : UserControl
         NumbersGrid.ItemsSource = null;
         NumbersGrid.ItemsSource = src;
     }
+
+    // ── Bulk Import dialog ────────────────────────────────────────────────────
+
+    private async void OnBulkImportRequested(object? sender, EventArgs e)
+    {
+        if (_boundVm is null) return;
+
+        var dialogVm = _boundVm.CreateBulkImportViewModel();
+
+        var dialog = new BulkImportDialog
+        {
+            XamlRoot   = XamlRoot,
+            DataContext = dialogVm
+        };
+
+        // Reload numbers after a successful apply so the grid reflects the changes
+        dialogVm.ApplyCompleted += async (_, _) =>
+        {
+            if (_boundVm?.LoadNumbersCommand.CanExecute(null) == true)
+                await _boundVm.LoadNumbersCommand.ExecuteAsync(null);
+        };
+
+        await dialog.ShowAsync();
+    }
+
+    // ── ComboBox event handlers ───────────────────────────────────────────────
 
     private async void UserComboBox_DropDownOpened(object sender, object e)
     {

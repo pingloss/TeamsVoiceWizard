@@ -1,5 +1,12 @@
 ﻿namespace TeamsVoiceWizard.Models;
 
+/// <summary>Result of a batch UPN lookup used by bulk import validation.</summary>
+public sealed record BulkUserResult(
+    string ObjectId,
+    string DisplayName,
+    bool   HasTeamsPhoneLicence
+);
+
 public record PolicyEntry(string Id, string DisplayName)
 {
     public override string ToString() => DisplayName;

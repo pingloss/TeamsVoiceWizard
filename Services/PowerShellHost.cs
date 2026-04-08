@@ -488,7 +488,13 @@ public sealed class PowerShellHost : IDisposable
             if (first?.BaseObject is T typed) return typed;
 
             try { return (T)Convert.ChangeType(first?.BaseObject, typeof(T))!; }
-            catch { return default!; }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"RunScalarAsync<{typeof(T).Name}> conversion failed for value " +
+                    $"'{first?.BaseObject}': {ex.Message}");
+                return default!;
+            }
         }
         finally { _lock.Release(); }
     }

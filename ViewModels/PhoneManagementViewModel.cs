@@ -57,6 +57,9 @@ public partial class PhoneManagementViewModel : ObservableObject
 
     public event EventHandler? GridRefreshRequested;
 
+    /// <summary>Raised when the user clicks Import. The View code-behind shows the dialog.</summary>
+    public event EventHandler? BulkImportRequested;
+
     [ObservableProperty]
     private PhoneNumberRecord? _selectedRecord;
 
@@ -617,6 +620,27 @@ public partial class PhoneManagementViewModel : ObservableObject
     private void CloseSidePanel()
     {
         SelectedRecord = null;
+    }
+
+    [RelayCommand]
+    private void OpenBulkImport()
+    {
+        BulkImportRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Creates a fresh BulkImportViewModel pre-loaded with the current tenant state.
+    /// Called by the View code-behind when the dialog is about to open.
+    /// </summary>
+    public BulkImportViewModel CreateBulkImportViewModel()
+    {
+        return new BulkImportViewModel(
+            graph:              RequireGraphPhone(),
+            tenantNumbers:      PhoneRecords,
+            dialPlans:          _policyCaches.DialPlans,
+            vrPolicies:         _policyCaches.VoiceRoutingPolicies,
+            graphPolicyIdCache: _graphPolicyIdCache,
+            log:                _host.Log);
     }
 
     private bool CanApplySingleChange() => SelectedRecord?.IsDirty == true;
