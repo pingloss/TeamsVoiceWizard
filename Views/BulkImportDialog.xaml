@@ -11,9 +11,12 @@
 
     <ContentDialog.Resources>
         <tw:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <!-- Override the template's built-in MaxWidth cap (~548px) so the dialog
+             can grow to fit the DataGrid. Without this the content is clipped. -->
+        <x:Double x:Key="ContentDialogMaxWidth">1000</x:Double>
     </ContentDialog.Resources>
 
-    <Grid MinHeight="520" Width="860">
+    <Grid MinHeight="520" HorizontalAlignment="Stretch">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
