@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.WinUI.UI.Controls;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -750,6 +751,37 @@ public partial class PhoneManagementViewModel : ObservableObject
             });
         }
     }
+
+    private string? _currentSortPath;
+    private DataGridSortDirection _currentSortDirection;
+
+    public DataGridSortDirection SortRecords(string sortPath)
+    {
+        var newDirection = (_currentSortPath == sortPath && _currentSortDirection == DataGridSortDirection.Ascending)
+            ? DataGridSortDirection.Descending
+            : DataGridSortDirection.Ascending;
+
+        _currentSortPath = sortPath;
+        _currentSortDirection = newDirection;
+
+        var sorted = newDirection == DataGridSortDirection.Ascending
+            ? PhoneRecords.OrderBy(r => GetSortValue(r, sortPath)).ToList()
+            : PhoneRecords.OrderByDescending(r => GetSortValue(r, sortPath)).ToList();
+
+        PhoneRecords.Clear();
+        foreach (var r in sorted) PhoneRecords.Add(r);
+
+        return newDirection;
+    }
+
+    private static string GetSortValue(PhoneNumberRecord r, string path) => path switch
+    {
+        nameof(PhoneNumberRecord.TelephoneNumber)         => r.TelephoneNumber ?? "",
+        nameof(PhoneNumberRecord.NumberType)              => r.NumberType ?? "",
+        nameof(PhoneNumberRecord.AssignedUserDisplayName) => r.AssignedUserDisplayName ?? "",
+        nameof(PhoneNumberRecord.AssignmentStatus)        => r.AssignmentStatus ?? "",
+        _ => ""
+    };
 
     private bool CanApplyBatchChanges() => PhoneRecords.Any(r => r.IsDirty);
 
