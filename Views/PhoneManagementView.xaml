@@ -53,19 +53,19 @@
                 <controls:DataGrid.Columns>
                     <controls:DataGridTextColumn Header="Phone Number"
                                                  Binding="{Binding TelephoneNumber}"
-                                                 SortMemberPath="TelephoneNumber"
+                                                 Tag="TelephoneNumber"
                                                  Width="160" />
                     <controls:DataGridTextColumn Header="Type"
                                                  Binding="{Binding NumberType}"
-                                                 SortMemberPath="NumberType"
+                                                 Tag="NumberType"
                                                  Width="140" />
                     <controls:DataGridTextColumn Header="Assigned To"
                                                  Binding="{Binding AssignedUserDisplayName}"
-                                                 SortMemberPath="AssignedUserDisplayName"
+                                                 Tag="AssignedUserDisplayName"
                                                  Width="220" />
                     <controls:DataGridTextColumn Header="Status"
                                                  Binding="{Binding AssignmentStatus}"
-                                                 SortMemberPath="AssignmentStatus"
+                                                 Tag="AssignmentStatus"
                                                  Width="*"
                                                  MinWidth="200" />
                 </controls:DataGrid.Columns>

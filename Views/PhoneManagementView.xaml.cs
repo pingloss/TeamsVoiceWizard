@@ -98,7 +98,7 @@ public sealed partial class PhoneManagementView : UserControl
     private void NumbersGrid_Sorting(object sender, DataGridColumnEventArgs e)
     {
         if (DataContext is not PhoneManagementViewModel vm) return;
-        if (e.Column.SortMemberPath is not string sortPath) return;
+        if (e.Column.Tag is not string sortPath) return;
 
         var newDirection = e.Column.SortDirection == DataGridSortDirection.Ascending
             ? DataGridSortDirection.Descending
