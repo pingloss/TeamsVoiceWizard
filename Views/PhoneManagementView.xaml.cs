@@ -1,5 +1,7 @@
+using CommunityToolkit.WinUI.UI.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using TeamsVoiceWizard.Models;
 using TeamsVoiceWizard.ViewModels;
 
 namespace TeamsVoiceWizard.Views;
@@ -92,4 +94,35 @@ public sealed partial class PhoneManagementView : UserControl
         if (DataContext is PhoneManagementViewModel vm)
             await vm.OnVoiceRoutingComboDropDownOpenedAsync().ConfigureAwait(true);
     }
+
+    private void NumbersGrid_Sorting(object sender, DataGridColumnEventArgs e)
+    {
+        if (DataContext is not PhoneManagementViewModel vm) return;
+        if (e.Column.SortMemberPath is not string sortPath) return;
+
+        var newDirection = e.Column.SortDirection == DataGridSortDirection.Ascending
+            ? DataGridSortDirection.Descending
+            : DataGridSortDirection.Ascending;
+
+        foreach (var col in NumbersGrid.Columns)
+            col.SortDirection = null;
+        e.Column.SortDirection = newDirection;
+
+        var sorted = newDirection == DataGridSortDirection.Ascending
+            ? vm.PhoneRecords.OrderBy(r => GetSortValue(r, sortPath)).ToList()
+            : vm.PhoneRecords.OrderByDescending(r => GetSortValue(r, sortPath)).ToList();
+
+        vm.PhoneRecords.Clear();
+        foreach (var r in sorted)
+            vm.PhoneRecords.Add(r);
+    }
+
+    private static string GetSortValue(PhoneNumberRecord r, string path) => path switch
+    {
+        nameof(PhoneNumberRecord.TelephoneNumber)         => r.TelephoneNumber ?? "",
+        nameof(PhoneNumberRecord.NumberType)              => r.NumberType ?? "",
+        nameof(PhoneNumberRecord.AssignedUserDisplayName) => r.AssignedUserDisplayName ?? "",
+        nameof(PhoneNumberRecord.AssignmentStatus)        => r.AssignmentStatus ?? "",
+        _ => ""
+    };
 }

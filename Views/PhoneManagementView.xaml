@@ -48,19 +48,24 @@
                                IsReadOnly="True"
                                GridLinesVisibility="Horizontal"
                                ItemsSource="{Binding PhoneRecords}"
-                               SelectedItem="{Binding SelectedRecord, Mode=TwoWay}">
+                               SelectedItem="{Binding SelectedRecord, Mode=TwoWay}"
+                               Sorting="NumbersGrid_Sorting">
                 <controls:DataGrid.Columns>
                     <controls:DataGridTextColumn Header="Phone Number"
                                                  Binding="{Binding TelephoneNumber}"
+                                                 SortMemberPath="TelephoneNumber"
                                                  Width="160" />
                     <controls:DataGridTextColumn Header="Type"
                                                  Binding="{Binding NumberType}"
+                                                 SortMemberPath="NumberType"
                                                  Width="140" />
                     <controls:DataGridTextColumn Header="Assigned To"
                                                  Binding="{Binding AssignedUserDisplayName}"
+                                                 SortMemberPath="AssignedUserDisplayName"
                                                  Width="220" />
                     <controls:DataGridTextColumn Header="Status"
                                                  Binding="{Binding AssignmentStatus}"
+                                                 SortMemberPath="AssignmentStatus"
                                                  Width="*"
                                                  MinWidth="200" />
                 </controls:DataGrid.Columns>
