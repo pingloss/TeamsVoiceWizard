@@ -1,0 +1,17 @@
+<Project ToolsVersion="15.0">
+  <!--
+    To update the version of Uno, you should instead update the Sdk version in the global.json file.
+
+    See https://aka.platform.uno/using-uno-sdk for more information.
+    See https://aka.platform.uno/using-uno-sdk#implicit-packages for more information regarding the Implicit Packages.
+  -->
+  <ItemGroup>
+    <PackageVersion Include="CommunityToolkit.Mvvm"                           Version="8.4.0" />
+    <PackageVersion Include="DocumentFormat.OpenXml"                          Version="3.2.0" />
+    <PackageVersion Include="Microsoft.PowerShell.SDK"                        Version="7.4.6" />
+    <PackageVersion Include="System.Management.Automation"                    Version="7.4.6" />
+    <PackageVersion Include="Uno.Fonts.Fluent"                                Version="2.7.1" />
+    <PackageVersion Include="CommunityToolkit.WinUI.UI.Controls.DataGrid"     Version="7.1.2" />
+    <PackageVersion Include="Uno.CommunityToolkit.WinUI.UI.Controls.DataGrid" Version="7.1.205" />
+  </ItemGroup>
+</Project>
